@@ -1,112 +1,156 @@
-
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-    <title>心動的每一天</title>
-
+    <title>DUNGEON REBORN</title>
     <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
-    <!-- 主選單 -->
-    <div id="menu">
-        <div class="menu-overlay">
-            <p class="menu-subtitle">MY YOUTH, MY STORY</p>
+<main class="game-container">
 
-            <h1 class="menu-title">心動的每一天</h1>
+    <header class="game-header">
+        <div class="logo">DUNGEON <span>REBORN</span></div>
+        <div class="header-tag">A DARK FANTASY ADVENTURE</div>
+    </header>
 
-            <p class="menu-description">
-                有些相遇，會讓平凡的日子變得特別。
-                <br>
-                你的青春故事，從這裡開始。
+    <!-- 獨立主頁 -->
+    <section id="homeScreen" class="home-screen">
+        <div class="home-content">
+            <p class="home-eyebrow">A DARK FANTASY ADVENTURE</p>
+            <h1 class="home-title">DUNGEON <span>REBORN</span></h1>
+            <p class="home-description">深入無盡的地牢，撐過一波又一波的史萊姆。</p>
+            <button id="homeStartButton" class="home-start-button">開始遊戲</button>
+
+            <div class="home-records" id="homeRecords"></div>
+
+            <p class="home-help">
+                WASD / 方向鍵 移動　·　自動攻擊　·　P 暫停　·　M 靜音　·　ESC 回主頁
             </p>
+            <p class="home-version">EARLY DEMO</p>
+        </div>
+    </section>
 
-            <button id="start-button" onclick="startGame()">
-                開始故事　→
+    <!-- 角色選擇 -->
+    <section id="selectionScreen" class="selection-panel hidden">
+        <div class="section-heading">
+            <p class="eyebrow">CHOOSE YOUR DESTINY</p>
+            <h1>選擇你的角色</h1>
+            <p class="subtitle">三種職業，三種戰鬥方式。所有角色都會自動鎖定並攻擊最近的敵人。</p>
+        </div>
+
+        <div class="character-list">
+            <button class="character-card" data-character="warrior">
+                <div class="character-art"><canvas id="warriorCanvas" width="192" height="192"></canvas></div>
+                <h2>WARRIOR</h2>
+                <p class="character-name">戰士</p>
+                <p class="character-description">高生命、近身大範圍揮砍，擊退力強。</p>
+                <p class="character-stats">HP 140　傷害 24　射程 近</p>
+                <span class="select-label">選擇角色</span>
+            </button>
+
+            <button class="character-card" data-character="lancer">
+                <div class="character-art"><canvas id="lancerCanvas" width="192" height="192"></canvas></div>
+                <h2>LANCER</h2>
+                <p class="character-name">槍兵</p>
+                <p class="character-description">長槍直線貫穿，一次刺穿整排敵人。</p>
+                <p class="character-stats">HP 110　傷害 20　射程 中</p>
+                <span class="select-label">選擇角色</span>
+            </button>
+
+            <button class="character-card" data-character="archer">
+                <div class="character-art"><canvas id="archerCanvas" width="192" height="192"></canvas></div>
+                <h2>ARCHER</h2>
+                <p class="character-name">弓箭手</p>
+                <p class="character-description">遠距離追蹤箭矢，脆弱但輸出穩定。</p>
+                <p class="character-stats">HP 85　傷害 15　射程 遠</p>
+                <span class="select-label">選擇角色</span>
             </button>
         </div>
-    </div>
 
-    <!-- 遊戲主畫面 -->
-    <main id="game" style="display: none;">
-
-        <button id="restart-button" onclick="restartGame()">
-            重新開始
-        </button>
-
-        <!-- 女主角 -->
-        <div id="character-area">
-            <img
-                id="character-image"
-                src="images/heroine.png"
-                alt="女主角"
-            >
+        <div class="selection-footer">
+            <button id="backButton" class="btn btn-dark">← 回主頁</button>
+            <p id="selectionStatus">請選擇一名冒險者</p>
+            <button id="startButton" class="btn btn-gold" disabled>進入地牢　→</button>
         </div>
+    </section>
 
-        <!-- 劇情對話 -->
-        <section id="dialogue-box">
-            <h3 id="character-name">旁白</h3>
+    <!-- 地牢遊戲 -->
+    <section id="dungeonScreen" class="hidden">
 
-            <p id="dialogue">
-                你走進教室，發現一位陌生的女孩坐在窗邊。
-            </p>
+        <div id="gameStatusBar">
+            <div class="status-level" id="statusLevel">LV. 1</div>
 
-            <div id="scene-progress">第 1 / 20 段</div>
-        </section>
-
-        <!-- 好感度 -->
-        <section id="affection-panel">
-            <p id="affection">好感度：0 / 100</p>
-
-            <p id="affection-level">關係：陌生人</p>
-
-            <div id="affection-bar">
-                <div id="affection-fill"></div>
+            <div class="status-item">
+                <div class="status-label"><span>HP</span><span id="statusHPText">100 / 100</span></div>
+                <div class="status-track"><div id="statusHPBar" class="status-fill hp-fill"></div></div>
             </div>
-        </section>
 
-        <!-- 劇情選項由 script.js 自動建立 -->
-        <div id="story-choices" style="display: none;"></div>
+            <div class="status-item">
+                <div class="status-label"><span>EXP</span><span id="statusEXPText">0 / 30</span></div>
+                <div class="status-track"><div id="statusEXPBar" class="status-fill exp-fill"></div></div>
+            </div>
 
-        <!-- 下一段劇情 -->
-        <button
-            id="next-button"
-            onclick="nextDialogue()"
-        >
-            下一段 ▶
-        </button>
-
-        <!-- 結局 CG -->
-        <div
-            id="ending-cg"
-            style="display: none;"
-            onclick="advanceEndingCG()"
-        >
-            <img
-                id="ending-cg-image"
-                src=""
-                alt="結局專屬插畫"
-            >
-
-            <div id="ending-dialogue-box">
-                <h3 id="ending-cg-title">故事結局</h3>
-
-                <p id="ending-cg-dialogue">
-                    點擊畫面，揭開故事結局……
-                </p>
-
-                <span id="ending-cg-hint">
-                    點擊畫面繼續 ▶
-                </span>
+            <div class="status-actions">
+                <button id="pauseButton" class="icon-btn" title="暫停 (P)">❚❚</button>
+                <button id="soundButton" class="icon-btn" title="音效 (M)">♪</button>
             </div>
         </div>
 
-    </main>
+        <div class="hud-sub">
+            <span>⏱ <b id="hudTime">00:00</b></span>
+            <span>WAVE <b id="hudWave">1</b></span>
+            <span>擊殺 <b id="hudKills">0</b></span>
+            <span>最高存活 <b id="hudBest">00:00</b></span>
+        </div>
+        <div class="passive-list" id="passiveList"></div>
 
-    <!-- JavaScript 放在 body 最後面 -->
-    <script src="script.js"></script>
+        <div class="stage">
+            <canvas id="game" width="1280" height="720"></canvas>
+
+            <!-- 升級三選一 -->
+            <div id="upgradeOverlay" class="overlay hidden">
+                <div class="upgrade-panel">
+                    <div class="upgrade-eyebrow">DUNGEON REBORN</div>
+                    <h2 class="upgrade-title" id="upgradeTitle">LEVEL UP</h2>
+                    <p class="upgrade-subtitle" id="upgradeSubtitle">選擇一項能力，繼續你的冒險</p>
+                    <div class="upgrade-cards" id="upgradeCards"></div>
+                    <p class="upgrade-hint">點擊卡片，或按下 1、2、3 選擇</p>
+                </div>
+            </div>
+
+            <!-- 暫停選單 -->
+            <div id="pauseOverlay" class="overlay hidden">
+                <div class="menu-panel">
+                    <h2 class="menu-title">PAUSED</h2>
+                    <p class="menu-sub">遊戲已暫停</p>
+                    <button id="resumeButton" class="btn btn-gold">繼續遊戲</button>
+                    <button id="pauseRestartButton" class="btn btn-dark">重新開始</button>
+                    <button id="pauseSoundButton" class="btn btn-dark">音效：開</button>
+                    <button id="pauseHomeButton" class="btn btn-dark">回到主頁</button>
+                </div>
+            </div>
+
+            <!-- 死亡結算 -->
+            <div id="deathOverlay" class="overlay hidden">
+                <div class="menu-panel death-panel">
+                    <h2 class="menu-title death-title">YOU DIED</h2>
+                    <p class="menu-sub">你倒在了地牢之中</p>
+                    <div class="death-stats" id="deathStats"></div>
+                    <button id="deathRestartButton" class="btn btn-gold">重新開始 (Enter)</button>
+                    <button id="deathHomeButton" class="btn btn-dark">回到主頁</button>
+                </div>
+            </div>
+        </div>
+
+    </section>
+
+    <footer class="game-footer">
+        DUNGEON REBORN <span>•</span> BEGIN YOUR ADVENTURE
+    </footer>
+</main>
+
+<script src="game.js"></script>
 </body>
 </html>
