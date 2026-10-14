@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>DUNGEON REBORN</title>
     <link rel="stylesheet" href="style.css">
 </head>
@@ -25,8 +25,11 @@
 
             <div class="home-records" id="homeRecords"></div>
 
-            <p class="home-help">
+            <p class="home-help kb-only">
                 WASD / 方向鍵 移動　·　自動攻擊　·　P 暫停　·　M 靜音　·　ESC 回主頁
+            </p>
+            <p class="home-help touch-only">
+                手指在畫面上拖曳即可移動　·　自動攻擊　·　右上 ❚❚ 暫停選單（可回主頁）　·　建議橫向遊玩
             </p>
             <p class="home-version">EARLY DEMO</p>
         </div>
@@ -150,6 +153,12 @@
         DUNGEON REBORN <span>•</span> BEGIN YOUR ADVENTURE
     </footer>
 </main>
+
+<!-- 觸控虛擬搖桿 -->
+<div id="joystick" class="joystick hidden">
+    <div class="joy-base"></div>
+    <div class="joy-knob" id="joyKnob"></div>
+</div>
 
 <script src="game.js"></script>
 </body>
