@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice">
+  <!-- 預設封面：放入 cover.png 後會自動被覆蓋 -->
+  <defs>
+    <radialGradient id="sky" cx="50%" cy="38%" r="75%">
+      <stop offset="0" stop-color="#5a3a22"/>
+      <stop offset=".35" stop-color="#2a1a22"/>
+      <stop offset="1" stop-color="#07070c"/>
+    </radialGradient>
+    <radialGradient id="portal" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#fff2c0"/>
+      <stop offset=".25" stop-color="#ffb24a"/>
+      <stop offset=".6" stop-color="#b8451c" stop-opacity=".7"/>
+      <stop offset="1" stop-color="#3a1010" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="slime" cx="40%" cy="30%" r="70%">
+      <stop offset="0" stop-color="#d4ff9a"/>
+      <stop offset=".6" stop-color="#5cc23a"/>
+      <stop offset="1" stop-color="#1d5a12"/>
+    </radialGradient>
+    <linearGradient id="stone" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a2830"/>
+      <stop offset="1" stop-color="#0d0c12"/>
+    </linearGradient>
+    <linearGradient id="floor" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1c1a22"/>
+      <stop offset="1" stop-color="#050508"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1920" height="1080" fill="url(#sky)"/>
+
+  <!-- 遠方光門 -->
+  <ellipse cx="960" cy="470" rx="380" ry="420" fill="url(#portal)" opacity=".85"/>
+
+  <!-- 拱門 -->
+  <path d="M520 1080 V420 Q520 120 960 110 Q1400 120 1400 420 V1080 H1300 V440 Q1300 220 960 210 Q620 220 620 440 V1080 Z" fill="url(#stone)"/>
+  <g stroke="#3c3846" stroke-width="4" fill="none" opacity=".8">
+    <path d="M560 400 Q560 160 960 150 Q1360 160 1360 400"/>
+    <path d="M520 600 H620 M520 780 H620 M520 940 H620 M1300 600 H1400 M1300 780 H1400 M1300 940 H1400"/>
+  </g>
+
+  <!-- 兩側柱子與火把 -->
+  <rect x="300" y="300" width="120" height="780" fill="url(#stone)"/>
+  <rect x="1500" y="300" width="120" height="780" fill="url(#stone)"/>
+  <ellipse cx="360" cy="300" rx="70" ry="90" fill="url(#portal)" opacity=".7"/>
+  <ellipse cx="1560" cy="300" rx="70" ry="90" fill="url(#portal)" opacity=".7"/>
+  <path d="M360 250 q-22 30 0 60 q22 -30 0 -60z M1560 250 q-22 30 0 60 q22 -30 0 -60z" fill="#ffe08a"/>
+
+  <!-- 地面 -->
+  <path d="M0 880 L1920 880 L1920 1080 L0 1080 Z" fill="url(#floor)"/>
+  <g stroke="#2a2732" stroke-width="3" opacity=".7">
+    <path d="M0 940 H1920 M0 1010 H1920 M200 880 L80 1080 M600 880 L540 1080 M960 880 V1080 M1320 880 L1380 1080 M1720 880 L1840 1080"/>
+  </g>
+
+  <!-- 勇者剪影 -->
+  <g fill="#0a0a0f">
+    <ellipse cx="960" cy="905" rx="90" ry="14" fill="#000" opacity=".6"/>
+    <path d="M930 900 L938 760 L915 700 Q920 640 960 630 Q1000 640 1005 700 L982 760 L990 900 Z"/>
+    <circle cx="960" cy="610" r="30"/>
+    <path d="M1000 690 L1150 520 L1162 532 L1012 704 Z" fill="#1a1a22"/>
+    <path d="M1150 520 L1170 500 L1176 528 Z" fill="#ffe7a8"/>
+    <path d="M915 690 Q860 760 870 880 L900 880 Q900 780 935 720 Z" opacity=".9"/>
+  </g>
+
+  <!-- 史萊姆群 -->
+  <g>
+    <path d="M300 900 Q300 800 380 790 Q460 800 460 900 Z" fill="url(#slime)"/>
+    <circle cx="360" cy="840" r="9" fill="#0b1a06"/><circle cx="400" cy="840" r="9" fill="#0b1a06"/>
+    <path d="M1460 910 Q1460 790 1560 780 Q1660 790 1660 910 Z" fill="url(#slime)"/>
+    <circle cx="1530" cy="840" r="11" fill="#0b1a06"/><circle cx="1590" cy="840" r="11" fill="#0b1a06"/>
+    <path d="M640 905 Q640 850 690 845 Q740 850 740 905 Z" fill="url(#slime)" opacity=".85"/>
+    <path d="M1200 905 Q1200 845 1255 840 Q1310 845 1310 905 Z" fill="url(#slime)" opacity=".85"/>
+  </g>
+
+  <!-- 火星 -->
+  <g fill="#ffb35a">
+    <circle cx="700" cy="500" r="4"/><circle cx="1240" cy="420" r="3"/><circle cx="880" cy="300" r="3"/>
+    <circle cx="1080" cy="560" r="4"/><circle cx="460" cy="620" r="3"/><circle cx="1460" cy="640" r="3"/>
+  </g>
+</svg>

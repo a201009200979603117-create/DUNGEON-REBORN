@@ -22,11 +22,15 @@ function mobileMode() { return IS_TOUCH || window.innerWidth < 820; }
 function updateZoom() { zoom = mobileMode() ? Math.max(1, Math.min(1.4, VIEW_W / 640)) : 1; }
 updateZoom();
 
-const RARITIES = [
-    { id: "common",    name: "普通", mult: 1,   color: "#c9c6d0" },
-    { id: "rare",      name: "稀有", mult: 1.7, color: "#5fb4ff" },
-    { id: "legendary", name: "傳說", mult: 2.6, color: "#ffb23e" }
-];
+/* 幸運：每張升級卡片獨立判定，觸發時效果 ×2（技能 / 道具 / 武器一次升兩級） */
+const LUCK_BASE = 0.10;        // 基礎幸運機率
+const LUCK_PER_CHARM = 0.05;   // 幸運符每級增加
+const LUCK_CHEST_BONUS = 0.35; // Boss 寶箱額外加成
+const LUCK_MAX = 0.75;
+
+/* 吸血平衡：每級 1% 傷害轉生命，且每秒回復量有上限（最大生命的 0.6% / 級） */
+const LIFESTEAL_RATE = 0.01;
+const LIFESTEAL_CAP = 0.006;
 
 /* ============================== 工具 ============================== */
 const $ = (id) => document.getElementById(id);
@@ -176,8 +180,6 @@ const ENEMY_TYPES = {
 };
 
 /* ============================== 升級資料 ============================== */
-const ITEM_GAIN = [1, 1, 2]; // 依稀有度獲得的道具等級
-
 const UPGRADES = [
     /* ---- 能力強化 ---- */
     { id: "attack", kind: "stat", name: "強力攻擊", icon: "⚔",
@@ -207,17 +209,17 @@ const UPGRADES = [
 
     /* ---- 被動裝備 / 道具（可疊到 5 級）---- */
     { id: "armor", kind: "item", max: 5, name: "鐵衛護甲", icon: "◈",
-      text: "受到傷害 -7% / 級" },
+      text: (lv) => `受到的傷害 -${7 * lv}%` },
     { id: "lifesteal", kind: "item", max: 5, name: "吸血戒指", icon: "❦",
-      text: "造成傷害的 3% 轉為生命 / 級" },
+      text: (lv) => `造成傷害的 ${Math.round(LIFESTEAL_RATE * 100 * lv)}% 轉為生命<br>每秒最多回復 ${(LIFESTEAL_CAP * 100 * lv).toFixed(1)}% 最大生命` },
     { id: "boots", kind: "item", max: 5, name: "疾風長靴", icon: "➶",
-      text: "移動速度 +6% / 級" },
+      text: (lv) => `移動速度 +${6 * lv}%` },
     { id: "luck", kind: "item", max: 5, name: "幸運符", icon: "☘",
-      text: "升級時更容易出現稀有、傳說" },
+      text: (lv) => `升級卡片觸發「幸運」機率 ${Math.round((LUCK_BASE + LUCK_PER_CHARM * lv) * 100)}%（幸運卡效果 ×2）` },
     { id: "thorns", kind: "item", max: 5, name: "荊棘之環", icon: "✺",
-      text: "被碰撞時反彈傷害給敵人" },
+      text: (lv) => `被碰撞時反彈 (5 + 波次) × ${lv} 點傷害給敵人` },
     { id: "aura", kind: "item", max: 5, name: "聖光符文", icon: "☼",
-      text: "周期性對周圍敵人造成光傷害" },
+      text: (lv) => `每 0.8 秒對半徑 ${80 + 14 * lv} 內的敵人造成 ${Math.round((0.2 + 0.12 * lv) * 100)}% 光傷害` },
 
     /* ---- 武器 ---- */
     { id: "weapon", kind: "weapon", name: "武器精煉", icon: "⚒" },
@@ -265,6 +267,7 @@ const SKILLS = {
             const p = G.player;
             const r = 120 + 20 * lv;
             if (!nearestEnemy(p.x, p.y, r)) return false;
+            G.effects.push({ kind: "shards", x: p.x, y: p.y, r, n: 14, t: 0.5, max: 0.5, color: "#bfeaff", rot: Math.random() * 6 });
             explode(p.x, p.y, r, 1 + 0.25 * lv, { color: "#8fd8ff", kb: 260, slow: 2.5, stun: lv >= 4 ? 0.5 : 0 });
             return true;
         }
@@ -337,6 +340,8 @@ const SKILLS = {
             const p = G.player;
             const r = 130 + 18 * lv;
             if (!nearestEnemy(p.x, p.y, r)) return false;
+            G.effects.push({ kind: "cracks", x: p.x, y: p.y, r, n: 9, t: 0.8, max: 0.8, seed: Math.random() * 1000 });
+            addParticles(p.x, p.y, 18, "#8a6a3e", 380, 7);
             explode(p.x, p.y, r, 1.5 + 0.3 * lv, { color: "#c9a56a", kb: 520, stun: 0.6 + 0.1 * lv });
             G.shake = Math.max(G.shake, 8);
             return true;
@@ -388,10 +393,10 @@ const ULTS = {
                 const x = e.x + rand(-50, 50);
                 const y = e.y + rand(-50, 50);
                 const delay = 0.5 + i * 0.07;
-                G.effects.push({ kind: "warn", x, y, r: 95, t: delay, max: delay });
+                G.effects.push({ kind: "warn", x, y, r: 95, t: delay, max: delay, meteor: true });
                 G.timers.push({ t: delay, fn: () => {
                     if (!G || G.dead) return;
-                    G.effects.push({ kind: "strike", x, y, t: 0.3, max: 0.3, color: "#ffb070" });
+                    G.effects.push({ kind: "cracks", x, y, r: 95, n: 6, t: 0.6, max: 0.6, seed: Math.random() * 1000 });
                     explode(x, y, 95, 3.2, { burn: true, color: "#ff6a2a", kb: 260 });
                 } });
             }
@@ -406,6 +411,7 @@ const ULTS = {
             const p = G.player;
             if (!nearestEnemy(p.x, p.y, 420)) { u.cd = 0.5; return; }
             u.cd = 6;
+            G.effects.push({ kind: "shards", x: p.x, y: p.y, r: 420, n: 28, t: 0.7, max: 0.7, color: "#e4f7ff", rot: Math.random() * 6 });
             explode(p.x, p.y, 420, 4, { color: "#aee6ff", kb: 600, slow: 3, stun: 1.2 });
             G.shake = Math.max(G.shake, 10);
             G.timers.push({ t: 0.5, fn: () => {
@@ -470,6 +476,95 @@ FUSIONS.forEach((f) => {
     UPGRADES.push({ id: "fuse_" + f.id, kind: "fusion", fusion: f, name: f.name, icon: f.icon });
 });
 
+/* =====================================================================
+   圖示：技能使用自繪 SVG（漸層定義在 index.html 的 #iconDefs），其他用符號徽章
+===================================================================== */
+const SKILL_SVG = {
+    fireball:
+        '<path d="M4 60 L28 24 L46 40 Z" fill="url(#gFire)" opacity=".35"/>' +
+        '<path d="M12 56 L31 30 L41 38 Z" fill="url(#gFire)" opacity=".7"/>' +
+        '<circle cx="40" cy="24" r="15" fill="url(#gFire)"/>' +
+        '<circle cx="43" cy="21" r="7" fill="#fff6c8"/>',
+    frostnova:
+        '<g stroke="url(#gIce)" stroke-width="4.5" stroke-linecap="round" fill="none">' +
+        [0, 60, 120].map((r) => `<g transform="rotate(${r} 32 32)"><path d="M32 5V59M32 14l-7-7M32 14l7-7M32 50l-7 7M32 50l7 7"/></g>`).join("") +
+        '</g><path d="M32 22l9 5v10l-9 5-9-5V27z" fill="#e8f8ff"/>',
+    lightning:
+        '<path d="M39 3 L13 37 H29 L23 61 L51 24 H34 Z" fill="url(#gBolt)" stroke="#fffbe0" stroke-width="2" stroke-linejoin="round"/>',
+    orbit:
+        '<circle cx="32" cy="32" r="21" fill="none" stroke="#9fc4ff" stroke-width="2" stroke-dasharray="5 6" opacity=".7"/>' +
+        '<circle cx="32" cy="32" r="8" fill="url(#gArcane)"/>' +
+        [0, 120, 240].map((r) => `<path transform="rotate(${r} 32 32)" d="M32 1 L38 11 L32 21 L26 11 Z" fill="url(#gSteel)" stroke="#fff" stroke-width="1"/>`).join(""),
+    poison:
+        '<circle cx="21" cy="38" r="13" fill="url(#gPoison)"/><circle cx="36" cy="30" r="15" fill="url(#gPoison)"/>' +
+        '<circle cx="46" cy="41" r="11" fill="url(#gPoison)"/>' +
+        '<circle cx="30" cy="31" r="3.5" fill="#132a0c"/><circle cx="41" cy="31" r="3.5" fill="#132a0c"/>' +
+        '<path d="M30 40 h11" stroke="#132a0c" stroke-width="3" stroke-linecap="round"/>' +
+        '<circle cx="16" cy="16" r="4" fill="#c8ff9a"/><circle cx="50" cy="12" r="3" fill="#c8ff9a"/><circle cx="26" cy="8" r="2" fill="#c8ff9a"/>',
+    boomerang:
+        '<path d="M8 40 A26 26 0 0 1 40 8" fill="none" stroke="#dfe9ff" stroke-width="2" opacity=".45"/>' +
+        '<path d="M14 54 A30 30 0 0 1 54 14" fill="none" stroke="#dfe9ff" stroke-width="2" opacity=".25"/>' +
+        '<path d="M40 16 L20 48" stroke="#9a7444" stroke-width="5" stroke-linecap="round"/>' +
+        '<path d="M38 19 C26 8 44 2 54 8 C50 16 48 24 38 19 Z" fill="url(#gSteel)" stroke="#fff" stroke-width="1"/>' +
+        '<path d="M38 19 C42 32 54 26 56 18 C50 16 44 14 38 19 Z" fill="url(#gSteel)" opacity=".8"/>',
+    quake:
+        '<path d="M2 44 H62 V62 H2 Z" fill="url(#gEarth)"/>' +
+        '<path d="M32 44 L27 50 L34 55 L29 62 M32 44 L40 52 L37 58" stroke="#1d1208" stroke-width="2.5" fill="none"/>' +
+        '<path d="M10 36 l6-8 6 6 -4 6z M44 30 l8-6 4 8 -6 4z M27 20 l5-6 5 5 -5 5z" fill="#c9a56a" stroke="#6b4a22"/>' +
+        '<path d="M6 40 Q32 24 58 40" stroke="#ffe0a0" stroke-width="2" fill="none" opacity=".6"/>',
+    shield:
+        '<path d="M32 4 L56 15 V33 C56 47 45 56 32 60 C19 56 8 47 8 33 V15 Z" fill="url(#gArcane)" stroke="#d6f0ff" stroke-width="2.5"/>' +
+        '<path d="M32 16 L44 23 V37 L32 44 L20 37 V23 Z" fill="none" stroke="#ffffff" stroke-width="2.5" opacity=".85"/>' +
+        '<circle cx="32" cy="30" r="4" fill="#fff"/>'
+};
+
+/* 每種技能 / 類別的主題色（卡片、徽章、晶片共用） */
+const SKILL_COLOR = {
+    fireball: "#ff8a3a", frostnova: "#7fd4ff", lightning: "#ffe04a", orbit: "#9fb8ff",
+    poison: "#8be05a", boomerang: "#d8e2ff", quake: "#d9a95f", shield: "#7ecbff"
+};
+const KIND_INFO = {
+    stat:   { label: "屬性強化", color: "#c6c3d6" },
+    item:   { label: "被動道具", color: "#6fe0b0" },
+    weapon: { label: "武器精煉", color: "#ff9d4a" },
+    evolve: { label: "武器進化", color: "#ffb23e" },
+    skill:  { label: "主動技能", color: "#5fb4ff" },
+    fusion: { label: "終極融合", color: "#ffb23e" },
+    heal:   { label: "消耗品",   color: "#ff7a8a" }
+};
+
+function svgIcon(inner) {
+    return `<svg viewBox="0 0 64 64" aria-hidden="true">${inner}</svg>`;
+}
+
+/* 回傳 { color, html }，html 為徽章內容 */
+function iconFor(kind, id) {
+    if (kind === "skill" && SKILL_SVG[id]) {
+        return { color: SKILL_COLOR[id], html: svgIcon(SKILL_SVG[id]) };
+    }
+    if (kind === "fusion" || kind === "ult") {
+        const f = FUSIONS.find((x) => x.id === id || "fuse_" + x.id === id);
+        if (f) {
+            return {
+                color: "#ffb23e",
+                html: svgIcon(
+                    `<g transform="translate(-2 -2) scale(.62)" opacity=".95">${SKILL_SVG[f.a]}</g>` +
+                    `<g transform="translate(26 26) scale(.62)">${SKILL_SVG[f.b]}</g>` +
+                    '<path d="M32 18 l3 9 9 3 -9 3 -3 9 -3-9 -9-3 9-3z" fill="#fff4c8"/>'
+                )
+            };
+        }
+    }
+    const def = UPGRADES.find((u) => u.id === id);
+    const info = KIND_INFO[kind] || KIND_INFO.stat;
+    return { color: info.color, html: `<span class="ico-glyph">${def ? def.icon : "?"}</span>` };
+}
+
+function badgeHTML(kind, id, extraClass) {
+    const ic = iconFor(kind, id);
+    return `<span class="ico ${extraClass || ""}" style="--ic:${ic.color}"><span class="ico-in">${ic.html}</span></span>`;
+}
+
 function skillLv(id) { return (G && G.skills[id] && G.skills[id].lv) || 0; }
 function skillSlotsUsed() { return Object.keys(G.skills).length + Object.keys(G.ults).length; }
 function fusionReady(f) {
@@ -502,8 +597,11 @@ function rollSkill(mult) {
 function explode(x, y, radius, mult, opts) {
     opts = opts || {};
     const color = opts.color || "#ff9a3a";
-    G.effects.push({ kind: "ring", x, y, r0: radius * 0.3, r1: radius, t: 0.35, max: 0.35, color, width: 6 });
-    addParticles(x, y, 12, color, 260, 5);
+    G.effects.push({ kind: "burst", x, y, r: radius, t: 0.32, max: 0.32, color });
+    G.effects.push({ kind: "ring", x, y, r0: radius * 0.3, r1: radius, t: 0.35, max: 0.35, color, width: 7 });
+    G.effects.push({ kind: "ring", x, y, r0: radius * 0.1, r1: radius * 1.15, t: 0.5, max: 0.5, color: "#ffffff", width: 2 });
+    addParticles(x, y, 16, color, 320, 5, true);
+    addParticles(x, y, 6, "#ffffff", 200, 3, true);
     Sound.play("boom");
     G.enemies.forEach((e) => {
         if (e.dead) return;
@@ -518,8 +616,9 @@ function explode(x, y, radius, mult, opts) {
 }
 
 function strike(x, y, mult, color) {
-    G.effects.push({ kind: "strike", x, y, t: 0.3, max: 0.3, color });
-    explode(x, y, 55, mult, { color: "#bfe8ff", kb: 80 });
+    G.effects.push({ kind: "strike", x, y, t: 0.35, max: 0.35, color, seed: Math.random() * 1000 });
+    explode(x, y, 60, mult, { color: "#bfe8ff", kb: 80 });
+    G.shake = Math.max(G.shake, 3);
 }
 
 function runBlades(s, mult, hitCd) {
@@ -576,6 +675,12 @@ function updateSkillShots(dt) {
             }
             s.x += s.vx * dt;
             s.y += s.vy * dt;
+            s.trail = (s.trail || 0) - dt;
+            if (s.trail <= 0) {
+                s.trail = 0.025;
+                G.particles.push({ x: s.x + rand(-4, 4), y: s.y + rand(-4, 4), vx: -s.vx * 0.15 + rand(-30, 30), vy: -s.vy * 0.15 + rand(-30, 30),
+                    t: 0.35, max: 0.35, color: Math.random() < 0.5 ? "#ffcf5a" : "#ff6a2a", size: rand(5, 9), glow: true });
+            }
             for (const e of G.enemies) {
                 if (e.dead) continue;
                 if (Math.hypot(e.x - s.x, e.y - s.y) < e.r + 12) {
@@ -586,6 +691,9 @@ function updateSkillShots(dt) {
             }
         } else if (s.kind === "axe") {
             s.spin += dt * 14;
+            s.ghosts = s.ghosts || [];
+            s.ghosts.unshift({ x: s.x, y: s.y, spin: s.spin });
+            if (s.ghosts.length > 5) s.ghosts.pop();
             if (s.phase === "out") {
                 s.x += Math.cos(s.aim) * s.speed * dt;
                 s.y += Math.sin(s.aim) * s.speed * dt;
@@ -662,69 +770,143 @@ function fuse(f) {
 }
 
 /* 技能繪製：地面層（毒霧 / 瘟疫領域） */
+function glowCircle(x, y, r, color, alpha) {
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, color);
+    g.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+}
+
 function drawSkillGround() {
     const p = G.player;
     G.zones.forEach((z) => {
         const a = clamp(z.t / z.max, 0, 1);
+        const fade = Math.min(1, a * 3, (1 - a) * 8 + 0.2);
+        const rr = z.r * (0.94 + 0.06 * Math.sin(G.anim * 4 + z.x));
         ctx.save();
-        ctx.globalAlpha = 0.35 * Math.min(1, a * 3);
-        ctx.fillStyle = "#5fc04a";
+        const g = ctx.createRadialGradient(z.x, z.y, rr * 0.1, z.x, z.y, rr);
+        g.addColorStop(0, "rgba(150, 255, 90, 0.55)");
+        g.addColorStop(0.6, "rgba(70, 170, 40, 0.35)");
+        g.addColorStop(1, "rgba(40, 110, 20, 0)");
+        ctx.globalAlpha = fade;
+        ctx.fillStyle = g;
         ctx.beginPath();
-        ctx.arc(z.x, z.y, z.r * (0.92 + 0.08 * Math.sin(G.anim * 4)), 0, Math.PI * 2);
+        ctx.arc(z.x, z.y, rr, 0, Math.PI * 2);
         ctx.fill();
-        ctx.globalAlpha = 0.6 * Math.min(1, a * 3);
-        ctx.strokeStyle = "#9cf07a";
+        ctx.strokeStyle = "#b8ff8a";
         ctx.lineWidth = 2;
+        ctx.setLineDash([10, 8]);
+        ctx.lineDashOffset = G.anim * 20;
+        ctx.globalAlpha = 0.7 * fade;
         ctx.stroke();
+        ctx.setLineDash([]);
+        // 冒泡
+        for (let i = 0; i < 7; i++) {
+            const h = hash2(i + 1, Math.floor(z.x)) * 6.28;
+            const life = (G.anim * 0.8 + i / 7) % 1;
+            const bx = z.x + Math.cos(h) * rr * 0.6 * hash2(i, 7);
+            const by = z.y + Math.sin(h) * rr * 0.5 - life * 40;
+            ctx.globalAlpha = (1 - life) * 0.8 * fade;
+            ctx.strokeStyle = "#d8ffb0";
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(bx, by, 3 + life * 5, 0, Math.PI * 2);
+            ctx.stroke();
+        }
         ctx.restore();
     });
     const pl = G.ults.plague;
     if (pl) {
         ctx.save();
-        ctx.globalAlpha = 0.14 + 0.04 * Math.sin(G.anim * 5);
-        ctx.fillStyle = "#8be05a";
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, pl.radius, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.globalAlpha = 0.6;
+        ctx.globalCompositeOperation = "lighter";
+        glowCircle(p.x, p.y, pl.radius, "rgba(140, 255, 70, 0.32)", 0.8 + 0.2 * Math.sin(G.anim * 5));
+        ctx.globalCompositeOperation = "source-over";
+        ctx.globalAlpha = 0.75;
         ctx.strokeStyle = "#c2ff7a";
         ctx.lineWidth = 3;
         ctx.setLineDash([14, 10]);
         ctx.lineDashOffset = -G.anim * 30;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, pl.radius, 0, Math.PI * 2);
         ctx.stroke();
+        ctx.setLineDash([]);
         ctx.restore();
     }
 }
 
 /* 技能繪製：空中層（投射物 / 飛刃 / 護盾） */
+function drawBlade(size, color) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(0, -size);
+    ctx.lineTo(size * 0.5, 0);
+    ctx.lineTo(0, size);
+    ctx.lineTo(-size * 0.5, 0);
+    ctx.closePath();
+    ctx.fill();
+}
+
+function drawAxeShape() {
+    ctx.beginPath();
+    ctx.moveTo(-20, -4); ctx.lineTo(0, -22); ctx.lineTo(20, -4);
+    ctx.lineTo(4, 0); ctx.lineTo(20, 4); ctx.lineTo(0, 22);
+    ctx.lineTo(-20, 4); ctx.closePath();
+}
+
 function drawSkillAir() {
     const p = G.player;
 
     G.skillShots.forEach((s) => {
         ctx.save();
         if (s.kind === "fire") {
-            ctx.shadowColor = "#ff7a2a";
-            ctx.shadowBlur = 18;
-            ctx.fillStyle = "#ffb04a";
+            ctx.globalCompositeOperation = "lighter";
+            glowCircle(s.x, s.y, 34, "rgba(255, 120, 40, 0.9)", 0.9);
+            ctx.globalCompositeOperation = "source-over";
+            ctx.globalAlpha = 1;
+            const ang = Math.atan2(s.vy, s.vx);
+            ctx.translate(s.x, s.y);
+            ctx.rotate(ang);
+            ctx.fillStyle = "#ff7a2a";
             ctx.beginPath();
-            ctx.arc(s.x, s.y, 11, 0, Math.PI * 2);
+            ctx.moveTo(-30, 0);
+            ctx.quadraticCurveTo(-8, -13, 4, -12);
+            ctx.arc(4, 0, 12, -Math.PI / 2, Math.PI / 2);
+            ctx.quadraticCurveTo(-8, 13, -30, 0);
             ctx.fill();
-            ctx.fillStyle = "#fff2c0";
+            ctx.fillStyle = "#ffd36a";
             ctx.beginPath();
-            ctx.arc(s.x, s.y, 5, 0, Math.PI * 2);
+            ctx.arc(4, 0, 8, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = "#fffbe6";
+            ctx.beginPath();
+            ctx.arc(6, 0, 4, 0, Math.PI * 2);
             ctx.fill();
         } else {
+            // 殘影
+            (s.ghosts || []).forEach((gh, i) => {
+                ctx.save();
+                ctx.translate(gh.x, gh.y);
+                ctx.rotate(gh.spin);
+                ctx.globalAlpha = 0.28 * (1 - i / 5);
+                ctx.fillStyle = "#9fc4ff";
+                drawAxeShape();
+                ctx.fill();
+                ctx.restore();
+            });
             ctx.translate(s.x, s.y);
             ctx.rotate(s.spin);
-            ctx.shadowColor = "#cfe2ff";
-            ctx.shadowBlur = 10;
-            ctx.fillStyle = "#dfe9ff";
-            ctx.strokeStyle = "#7e8bb0";
+            ctx.globalCompositeOperation = "lighter";
+            glowCircle(0, 0, 36, "rgba(160, 200, 255, 0.5)", 0.8);
+            ctx.globalCompositeOperation = "source-over";
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = "#eef4ff";
+            ctx.strokeStyle = "#6f7fa8";
             ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(-20, -4); ctx.lineTo(0, -22); ctx.lineTo(20, -4);
-            ctx.lineTo(4, 0); ctx.lineTo(20, 4); ctx.lineTo(0, 22);
-            ctx.lineTo(-20, 4); ctx.closePath();
+            drawAxeShape();
             ctx.fill();
             ctx.stroke();
         }
@@ -733,24 +915,37 @@ function drawSkillAir() {
 
     [G.skills.orbit, G.ults.bladestorm].forEach((s) => {
         if (!s || !s.count) return;
+        const big = s === G.ults.bladestorm;
+        const size = s.bladeSize || 14;
+        // 刀光軌跡
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        ctx.lineCap = "round";
+        for (let i = 0; i < s.count; i++) {
+            const a = s.angle + (i * Math.PI * 2) / s.count;
+            for (let k = 0; k < 4; k++) {
+                ctx.globalAlpha = 0.22 - k * 0.05;
+                ctx.strokeStyle = big ? "#ffd27a" : "#9fc4ff";
+                ctx.lineWidth = size * (0.9 - k * 0.18);
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, s.radius, a - 0.12 * (k + 1), a - 0.12 * k);
+                ctx.stroke();
+            }
+        }
+        ctx.restore();
         for (let i = 0; i < s.count; i++) {
             const a = s.angle + (i * Math.PI * 2) / s.count;
             const bx = p.x + Math.cos(a) * s.radius;
             const by = p.y + Math.sin(a) * s.radius;
-            const size = s.bladeSize || 14;
             ctx.save();
             ctx.translate(bx, by);
-            ctx.rotate(a * 3);
-            ctx.shadowColor = "#9fc4ff";
-            ctx.shadowBlur = 12;
-            ctx.fillStyle = "#e8f0ff";
-            ctx.beginPath();
-            ctx.moveTo(0, -size);
-            ctx.lineTo(size * 0.55, 0);
-            ctx.lineTo(0, size);
-            ctx.lineTo(-size * 0.55, 0);
-            ctx.closePath();
-            ctx.fill();
+            ctx.globalCompositeOperation = "lighter";
+            glowCircle(0, 0, size * 1.8, big ? "rgba(255, 190, 90, 0.7)" : "rgba(130, 180, 255, 0.7)", 0.9);
+            ctx.globalCompositeOperation = "source-over";
+            ctx.globalAlpha = 1;
+            ctx.rotate(a + Math.PI / 2);
+            drawBlade(size, big ? "#fff0c8" : "#eef4ff");
+            drawBlade(size * 0.5, big ? "#ffb23e" : "#7fa8ff");
             ctx.restore();
         }
     });
@@ -759,13 +954,25 @@ function drawSkillAir() {
         const s = pair[0];
         if (!s || s.charges <= 0) return;
         ctx.save();
+        ctx.translate(p.x, p.y - 6);
+        ctx.globalCompositeOperation = "lighter";
+        glowCircle(0, 0, 70, pair[1] === "#7ecbff" ? "rgba(90, 170, 255, 0.25)" : "rgba(255, 200, 90, 0.25)", 0.7 + 0.2 * Math.sin(G.anim * 4));
+        ctx.globalCompositeOperation = "source-over";
         ctx.strokeStyle = pair[1];
-        ctx.lineWidth = 3;
-        ctx.globalAlpha = 0.55 + 0.2 * Math.sin(G.anim * 5);
         for (let i = 0; i < s.charges; i++) {
+            const r = 46 + i * 9;
+            ctx.save();
+            ctx.rotate(G.anim * (i % 2 ? -0.8 : 0.8));
+            ctx.globalAlpha = 0.65 + 0.2 * Math.sin(G.anim * 5 + i);
+            ctx.lineWidth = 2.5;
             ctx.beginPath();
-            ctx.arc(p.x, p.y - 6, 44 + i * 7, 0, Math.PI * 2);
+            for (let k = 0; k <= 6; k++) {
+                const a = (k / 6) * Math.PI * 2;
+                if (k === 0) ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+                else ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+            }
             ctx.stroke();
+            ctx.restore();
         }
         ctx.restore();
     });
@@ -773,7 +980,11 @@ function drawSkillAir() {
 
 /* ============================== 存檔 ============================== */
 function defaultSave() {
-    return { bestTime: 0, bestKills: 0, bestLevel: 1, bestWave: 1, bestBoss: 0, runs: 0, muted: false };
+    return {
+        bestTime: 0, bestKills: 0, bestLevel: 1, bestWave: 1, bestBoss: 0, runs: 0,
+        bestScore: 0, bestChar: "", playerName: "冒險者",
+        muted: false, volume: 0.8, shake: true, numbers: true
+    };
 }
 function loadSave() {
     try {
@@ -803,9 +1014,13 @@ const Sound = {
             if (!AC) return;
             this.ctx = new AC();
             this.master = this.ctx.createGain();
-            this.master.gain.value = 0.32;
+            this.applyVolume();
             this.master.connect(this.ctx.destination);
         } catch (e) { this.ctx = null; }
+    },
+
+    applyVolume() {
+        if (this.master) this.master.gain.value = 0.4 * clamp(save.volume, 0, 1);
     },
 
     tone(freq, dur, type, vol, slide, delay) {
@@ -866,6 +1081,7 @@ const Sound = {
             case "boom":    this.noise(0.18, 0.1); this.tone(90, 0.18, "sawtooth", 0.09, -40); break;
             case "evolve":  [392, 523, 659, 784, 1047, 1319].forEach((f, i) => this.tone(f, 0.22, "triangle", 0.12, 0, i * 0.07)); break;
             case "heal":    this.tone(600, 0.12, "sine", 0.08, 400); this.tone(800, 0.14, "sine", 0.07, 400, 0.08); break;
+            case "lucky":   [784, 988, 1175, 1568, 1976].forEach((f, i) => this.tone(f, 0.16, "sine", 0.1, 0, i * 0.05)); break;
             case "death":   [330, 262, 196, 131].forEach((f, i) => this.tone(f, 0.4, "sawtooth", 0.14, -40, i * 0.22)); break;
             default: break;
         }
@@ -900,8 +1116,21 @@ const dom = {
     deathStats: $("deathStats"),
     soundBtn: $("soundButton"),
     pauseSoundBtn: $("pauseSoundButton"),
+    pauseSkills: $("pauseSkills"),
     joy: $("joystick"),
-    joyKnob: $("joyKnob")
+    joyKnob: $("joyKnob"),
+    tip: $("skillTip"),
+    settings: $("settingsModal"),
+    volume: $("setVolume"),
+    volumeVal: $("setVolumeVal"),
+    mute: $("setMute"),
+    fullscreen: $("setFullscreen"),
+    shake: $("setShake"),
+    numbers: $("setNumbers"),
+    playerName: $("setName"),
+    board: $("boardModal"),
+    boardList: $("boardList"),
+    boardMe: $("boardMe")
 };
 const ctx = dom.canvas.getContext("2d");
 
@@ -991,7 +1220,8 @@ function createState(ch) {
             pickupMult: 1, regen: 0, areaMult: 1,
             invincible: 0, attackCd: 0,
             attacking: false, attackTime: 0, attackDur: 0.3, hitAt: 0.15, hitDone: true, attackAim: 0,
-            facingX: 1, moving: false, auraTimer: 0
+            facingX: 1, moving: false, auraTimer: 0,
+            lsBudget: 0
         },
 
         items: {},
@@ -1073,6 +1303,7 @@ function setScene(name) {
     dom.selection.classList.toggle("hidden", name !== "selection");
     dom.dungeon.classList.toggle("hidden", name !== "playing");
     clearKeys();
+    hideTip();
     if (name === "home") refreshRecords();
 }
 
@@ -1086,19 +1317,119 @@ function commitRecords() {
     if (G.player.level > save.bestLevel) { save.bestLevel = G.player.level; nr.level = true; }
     if (G.wave > save.bestWave) { save.bestWave = G.wave; nr.wave = true; }
     if (G.bossKills > save.bestBoss) { save.bestBoss = G.bossKills; nr.boss = true; }
+    G.score = runScore(G.time, G.kills, G.player.level, G.bossKills, G.wave);
+    G.rankBefore = playerRank();
+    if (G.score > save.bestScore) {
+        save.bestScore = G.score;
+        save.bestChar = G.character.id;
+        save.bestRun = { time: G.time, wave: G.wave, kills: G.kills };
+        nr.score = true;
+    }
+    G.rankAfter = playerRank();
     save.runs++;
     G.newRecords = nr;
     writeSave();
 }
 
 function refreshRecords() {
+    const rec = (label, val) => `<div class="rec"><span>${label}</span><b>${val}</b></div>`;
     dom.homeRecords.innerHTML =
-        `<span>最長存活 <b>${fmtTime(save.bestTime)}</b></span>` +
-        `<span>最高等級 <b>${save.bestLevel}</b></span>` +
-        `<span>最高波次 <b>${save.bestWave}</b></span>` +
-        `<span>最多擊殺 <b>${save.bestKills}</b></span>` +
-        `<span>擊敗 Boss <b>${save.bestBoss}</b></span>` +
-        `<span>遊玩次數 <b>${save.runs}</b></span>`;
+        rec("排行榜", "#" + playerRank()) +
+        rec("最高積分", save.bestScore.toLocaleString()) +
+        rec("最長存活", fmtTime(save.bestTime)) +
+        rec("最高波次", save.bestWave) +
+        rec("最多擊殺", save.bestKills) +
+        rec("遊玩次數", save.runs);
+}
+
+/* ============================== 虛擬排行榜 ==============================
+   排行榜資料為固定種子產生的虛構玩家（非真實資料），只顯示第 1~100 名。
+   玩家初始積分為 0，排在第 100 名；最佳積分超過誰就往上爬。 */
+function runScore(time, kills, level, bosses, wave) {
+    return Math.round(time * 8 + kills * 6 + level * 40 + bosses * 600 + (wave - 1) * 120);
+}
+
+const FAKE_BOARD = (() => {
+    let seed = 20261014;
+    const rnd = () => {
+        seed = (seed + 0x6d2b79f5) | 0;
+        let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const pick = (arr) => arr[Math.floor(rnd() * arr.length)];
+    const pre = ["暗影", "烈焰", "霜月", "鐵血", "孤狼", "星辰", "赤焰", "幽冥", "蒼穹", "雷鳴", "黑曜", "銀翼", "血薔薇", "夜鴉", "龍息", "聖騎", "無名", "狂戰"];
+    const suf = ["劍聖", "獵手", "行者", "騎士", "遊俠", "之刃", "守望", "旅人", "君王", "槍神", "魔弓", "勇者", "殺手", "少女", "大叔", "喵"];
+    const eng = ["Shadow", "Nova", "Kael", "Ryu", "Lumi", "Vex", "Aria", "Zed", "Mira", "Orion", "Kira", "Blaze", "Frost", "Echo", "Raven", "Jin"];
+    const chars = ["warrior", "lancer", "archer"];
+    const used = new Set();
+    const list = [];
+    for (let r = 1; r <= 99; r++) {
+        let name;
+        do {
+            const k = rnd();
+            if (k < 0.45) name = pick(pre) + pick(suf);
+            else if (k < 0.8) name = pick(eng) + (rnd() < 0.5 ? "_" : "") + Math.floor(rnd() * 999);
+            else name = pick(pre) + "の" + pick(eng);
+        } while (used.has(name));
+        used.add(name);
+        const time = 50 * Math.pow(2700 / 50, (99 - r) / 98) * (0.94 + rnd() * 0.12);
+        const wave = Math.floor(time / WAVE_DURATION) + 1;
+        const level = Math.max(2, Math.round((2 + time / 20) * (0.9 + rnd() * 0.2)));
+        const kills = Math.round(time * (1.1 + time / 700) * (0.85 + rnd() * 0.3));
+        const bosses = Math.max(0, Math.floor(wave / BOSS_EVERY) - (rnd() < 0.3 ? 1 : 0));
+        list.push({ name, char: pick(chars), time, wave, kills, score: runScore(time, kills, level, bosses, wave) });
+    }
+    list.sort((a, b) => b.score - a.score);
+    return list;
+})();
+
+function playerRank() {
+    if (save.bestScore <= 0) return 100;
+    const above = FAKE_BOARD.filter((f) => f.score >= save.bestScore).length;
+    return Math.min(100, above + 1);
+}
+
+const CHAR_LABEL = { warrior: "戰士", lancer: "槍兵", archer: "弓箭手" };
+
+function renderBoard() {
+    const rank = playerRank();
+    const me = {
+        me: true, name: save.playerName || "冒險者", char: save.bestChar,
+        time: save.bestRun ? save.bestRun.time : 0,
+        wave: save.bestRun ? save.bestRun.wave : 0,
+        kills: save.bestRun ? save.bestRun.kills : 0,
+        score: save.bestScore
+    };
+    const rows = FAKE_BOARD.slice(0, rank - 1).concat([me], FAKE_BOARD.slice(rank - 1, 99)).slice(0, 100);
+    const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    dom.boardList.innerHTML = rows.map((r, i) => {
+        const n = i + 1;
+        const medal = n <= 3 ? ` top top${n}` : "";
+        return `<li class="board-row${medal}${r.me ? " me" : ""}">` +
+            `<span class="b-rank">${n <= 3 ? ["🥇", "🥈", "🥉"][n - 1] : n}</span>` +
+            `<span class="b-name">${esc(r.name)}${r.me ? ' <em>YOU</em>' : ""}</span>` +
+            `<span class="b-char">${CHAR_LABEL[r.char] || "—"}</span>` +
+            `<span class="b-time">${r.time ? fmtTime(r.time) : "--:--"}</span>` +
+            `<span class="b-wave">${r.wave ? "W" + r.wave : "—"}</span>` +
+            `<span class="b-score">${r.score.toLocaleString()}</span></li>`;
+    }).join("");
+    const next = rank > 1 ? FAKE_BOARD[rank - 2] : null;
+    dom.boardMe.innerHTML =
+        `<div><small>你的排名</small><b>#${rank}</b></div>` +
+        `<div><small>最佳積分</small><b>${save.bestScore.toLocaleString()}</b></div>` +
+        `<div><small>${next ? "距離上一名" : "榮耀"}</small><b>${next ? "+" + (next.score - save.bestScore + 1).toLocaleString() : "第一名！"}</b></div>`;
+}
+
+function openBoard() {
+    renderBoard();
+    openModal(dom.board);
+    // 自己那一列是 sticky，因此依名次計算捲動位置
+    requestAnimationFrame(() => {
+        const first = dom.boardList.firstElementChild;
+        const rowH = first ? first.offsetHeight : 38;
+        dom.boardList.scrollTop = (playerRank() - 1) * rowH - dom.boardList.clientHeight / 2 + rowH / 2;
+    });
 }
 
 /* ============================== 玩家屬性輔助 ============================== */
@@ -1126,13 +1457,13 @@ function addNumber(x, y, text, type) {
     if (G.numbers.length > 90) G.numbers.shift();
 }
 
-function addParticles(x, y, n, color, speed, size) {
+function addParticles(x, y, n, color, speed, size, glow) {
     for (let i = 0; i < n; i++) {
         const a = Math.random() * Math.PI * 2;
         const s = rand(0.3, 1) * speed;
         G.particles.push({
             x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s,
-            t: rand(0.25, 0.5), max: 0.5, color, size: size || 4
+            t: rand(0.25, 0.55), max: 0.55, color, size: size || 4, glow: !!glow
         });
     }
     if (G.particles.length > 400) G.particles.splice(0, G.particles.length - 400);
@@ -1439,8 +1770,13 @@ function damageEnemy(e, hit, opts) {
         e.burnDps = Math.max(1, Math.round(hit.dmg * 0.25));
     }
 
+    // 吸血：比例降低，且受每秒上限（lsBudget）限制，避免大範圍技能瞬間回滿
     const ls = itemLv("lifesteal");
-    if (ls > 0 && !opts.silent) healPlayer(hit.dmg * 0.03 * ls, false);
+    if (ls > 0 && !opts.silent && p.lsBudget > 0) {
+        const amount = Math.min(hit.dmg * LIFESTEAL_RATE * ls, p.lsBudget);
+        p.lsBudget -= amount;
+        healPlayer(amount, false);
+    }
 
     if (!opts.silent) {
         Sound.play(hit.crit ? "crit" : "hit");
@@ -1480,7 +1816,7 @@ function killEnemy(e) {
         }
         healPlayer(G.player.maxHp * 0.3, true);
         G.queue.push({ chest: true });
-        setBanner("BOSS 擊破！", "獲得稀有以上的寶藏強化", "#ffb23e");
+        setBanner("BOSS 擊破！", "寶藏強化：幸運機率大幅提升", "#ffb23e");
         Sound.play("evolve");
     } else {
         dropOrb(e.x, e.y, value);
@@ -1527,27 +1863,31 @@ function isAvailable(def) {
     }
 }
 
-function rollRarity(chest) {
-    const luck = itemLv("luck");
-    let w = [Math.max(25, 70 - luck * 4), 25 + luck * 2, 5 + luck * 1.5];
-    if (chest) w = [0, 62 + luck, 38 + luck];
-    const total = w[0] + w[1] + w[2];
-    let r = Math.random() * total;
-    for (let i = 0; i < 3; i++) {
-        r -= w[i];
-        if (r <= 0) return i;
+function luckChance(chest) {
+    return Math.min(LUCK_MAX, LUCK_BASE + LUCK_PER_CHARM * itemLv("luck") + (chest ? LUCK_CHEST_BONUS : 0));
+}
+
+/* 只有「效果真的能翻倍」的卡片才會觸發幸運（例如 Lv.4 技能再升兩級會超過上限，就不判定） */
+function canBeLucky(def) {
+    switch (def.kind) {
+        case "stat":
+        case "heal":   return true;
+        case "item":   return itemLv(def.id) + 2 <= def.max;
+        case "skill":  return skillLv(def.id) + 2 <= SKILL_MAX;
+        case "weapon": return G.weaponLevel + 2 <= 4;
+        default:       return false;   // 進化、融合不受幸運影響
     }
-    return 0;
 }
 
 function buildChoices(chest) {
     const avail = UPGRADES.filter(isAvailable);
 
-    // 武器進化、技能融合：條件達成時優先出現（傳說）
+    // 武器進化、技能融合：條件達成時優先出現
     const forced = avail.filter((u) => u.kind === "evolve" || u.kind === "fusion");
-    const picks = forced.slice(0, 3).map((def) => ({ def, rarity: 2 }));
+    const picks = forced.slice(0, 3).map((def) => ({ def, lucky: false }));
 
     const pool = avail.filter((u) => u.kind !== "evolve" && u.kind !== "fusion");
+    const chance = luckChance(chest);
     while (picks.length < 3 && pool.length > 0) {
         const ws = pool.map(weightOf);
         let total = 0;
@@ -1560,37 +1900,42 @@ function buildChoices(chest) {
         }
         idx = Math.min(idx, pool.length - 1);
         const def = pool.splice(idx, 1)[0];
-        let rarity = rollRarity(chest);
-        if (def.kind === "weapon") rarity = 1;
-        picks.push({ def, rarity });
+        picks.push({ def, lucky: canBeLucky(def) && Math.random() < chance });
     }
     return picks;
 }
 
+function upgradeGain(c) { return c.lucky ? 2 : 1; }
+
 function cardText(c) {
     const d = c.def;
-    const m = RARITIES[c.rarity].mult;
+    const m = upgradeGain(c);
     const ch = G.character;
     switch (d.kind) {
         case "stat": return d.text(m);
         case "item": {
             const cur = itemLv(d.id);
-            const next = Math.min(d.max, cur + ITEM_GAIN[c.rarity]);
-            return `${d.text}<br>Lv.${cur} → Lv.${next}` + (c.rarity === 1 ? "<br>額外恢復 15% 生命" : "");
+            const next = Math.min(d.max, cur + m);
+            return `${d.text(next)}<br><span class="lv-step">Lv.${cur} → Lv.${next}</span>`;
         }
-        case "weapon": return `${ch.weaponName} Lv.${G.weaponLevel} → Lv.${G.weaponLevel + 1}<br>${ch.weaponUp}`;
+        case "weapon": {
+            const next = Math.min(4, G.weaponLevel + m);
+            return `${ch.weaponUp}<br><span class="lv-step">Lv.${G.weaponLevel} → Lv.${next}</span>`;
+        }
         case "evolve": return `${ch.evoName}<br>${ch.evoText}`;
         case "skill": {
             const sk = SKILLS[d.id];
             const cur = skillLv(d.id);
-            const next = Math.min(SKILL_MAX, cur + ITEM_GAIN[c.rarity]);
+            const next = Math.min(SKILL_MAX, cur + m);
             const partners = FUSIONS
                 .filter((f) => f.a === d.id || f.b === d.id)
                 .map((f) => `${SKILLS[f.a === d.id ? f.b : f.a].name} → ${f.name}`)
                 .join("、");
             return sk.text(next) +
-                (cur === 0 ? "<br>【習得新技能】" : `<br>Lv.${cur} → Lv.${next}${next >= SKILL_MAX ? "（滿級）" : ""}`) +
-                `<br><small style="opacity:.7">融合：${partners}</small>`;
+                (cur === 0
+                    ? `<br><span class="lv-step">【習得新技能】${next > 1 ? " 直接 Lv." + next : ""}</span>`
+                    : `<br><span class="lv-step">Lv.${cur} → Lv.${next}${next >= SKILL_MAX ? "（滿級）" : ""}</span>`) +
+                `<br><small>融合：${partners}</small>`;
         }
         case "fusion": {
             const f = d.fusion;
@@ -1604,6 +1949,7 @@ function cardText(c) {
 function cardName(c) {
     if (c.def.kind === "evolve") return "進化：" + G.character.evoName;
     if (c.def.kind === "fusion") return "融合：" + c.def.name;
+    if (c.def.kind === "weapon") return G.character.weaponName;
     return c.def.name;
 }
 
@@ -1614,34 +1960,39 @@ function openUpgrade() {
     G.choices = buildChoices(entry.chest);
     G.choosing = true;
     clearKeys();
+    hideTip();
 
     dom.upgradeTitle.textContent = entry.fusion ? "FUSION" : (entry.chest ? "BOSS 寶藏" : "LEVEL UP");
     dom.upgradeSubtitle.textContent = entry.fusion
         ? "兩項技能已滿級 — 選擇融合卡即可獲得終極技能（選別張則稍後升級時再次出現）"
         : (entry.chest
-            ? "擊敗 Boss 的獎勵 — 稀有度更高"
-            : `等級 ${G.player.level} — 選擇一項能力，繼續你的冒險`);
+            ? `擊敗 Boss 的獎勵 — 幸運機率提升至 ${Math.round(luckChance(true) * 100)}%`
+            : `等級 ${G.player.level} — 選擇一項能力（幸運機率 ${Math.round(luckChance(false) * 100)}%）`);
 
     renderUpgradeCards();
     dom.upgradeOverlay.classList.remove("hidden");
+    if (G.choices.some((c) => c.lucky)) setTimeout(() => Sound.play("lucky"), 250);
 }
 
 function renderUpgradeCards() {
     dom.upgradeCards.replaceChildren();
     G.choices.forEach((c, index) => {
-        const r = RARITIES[c.rarity];
+        const d = c.def;
+        const info = KIND_INFO[d.kind] || KIND_INFO.stat;
+        const ic = iconFor(d.kind, d.kind === "fusion" ? d.fusion.id : d.id);
         const card = document.createElement("button");
         card.type = "button";
-        card.className = "upgrade-card r-" + r.id;
+        card.className = "upgrade-card k-" + d.kind + (c.lucky ? " lucky" : "");
         card.style.setProperty("--card-index", index);
+        card.style.setProperty("--rc", ic.color || info.color);
         card.innerHTML =
-            `<span class="upgrade-number">0${index + 1}</span>` +
-            `<span class="upgrade-rarity">${r.name}</span>` +
-            `<span class="upgrade-icon"></span>` +
+            `<span class="upgrade-number">${index + 1}</span>` +
+            `<span class="upgrade-kind">${info.label}</span>` +
+            (c.lucky ? `<span class="lucky-badge">☘ 幸運！${d.kind === "stat" || d.kind === "heal" ? "效果 ×2" : "一次升兩級"}</span>` : "") +
+            badgeHTML(d.kind, d.kind === "fusion" ? d.fusion.id : d.id, "big") +
             `<span class="upgrade-card-title"></span>` +
             `<span class="upgrade-card-description"></span>` +
-            `<span class="upgrade-card-action">選擇強化 ↗</span>`;
-        card.querySelector(".upgrade-icon").textContent = c.def.icon;
+            `<span class="upgrade-card-action">選擇 ›</span>`;
         card.querySelector(".upgrade-card-title").textContent = cardName(c);
         card.querySelector(".upgrade-card-description").innerHTML = cardText(c);
         card.addEventListener("click", () => chooseUpgrade(index));
@@ -1655,28 +2006,28 @@ function chooseUpgrade(index) {
     if (!c) return;
     const p = G.player;
     const d = c.def;
-    const m = RARITIES[c.rarity].mult;
+    const m = upgradeGain(c);
 
     switch (d.kind) {
         case "stat":
             d.apply(p, m);
             break;
         case "item":
-            G.items[d.id] = Math.min(d.max, itemLv(d.id) + ITEM_GAIN[c.rarity]);
-            if (c.rarity === 1) healPlayer(p.maxHp * 0.15, true);
+            G.items[d.id] = Math.min(d.max, itemLv(d.id) + m);
             break;
         case "weapon":
-            G.weaponLevel = Math.min(4, G.weaponLevel + 1);
+            G.weaponLevel = Math.min(4, G.weaponLevel + m);
             break;
         case "evolve":
             G.evolved = true;
             setBanner("武器進化！", G.character.evoName, "#ffb23e");
             G.effects.push({ kind: "ring", x: p.x, y: p.y, r0: 20, r1: 320, t: 0.9, max: 0.9, color: "#ffb23e", width: 8 });
+            G.effects.push({ kind: "pillar", t: 1.2, max: 1.2, color: "#ffb23e" });
             Sound.play("evolve");
             break;
         case "skill": {
             const cur = skillLv(d.id);
-            const nl = Math.min(SKILL_MAX, cur + ITEM_GAIN[c.rarity]);
+            const nl = Math.min(SKILL_MAX, cur + m);
             if (cur === 0) {
                 G.skills[d.id] = { lv: nl, cd: 0.4, charges: 1, regen: 9, angle: 0, count: 0, radius: 0, bladeSize: 14 };
             } else {
@@ -1697,6 +2048,7 @@ function chooseUpgrade(index) {
         }
         case "fusion":
             fuse(d.fusion);
+            G.effects.push({ kind: "pillar", t: 1.2, max: 1.2, color: "#ffb23e" });
             break;
         case "heal":
             healPlayer(p.maxHp * 0.35 * m, true);
@@ -1706,7 +2058,14 @@ function chooseUpgrade(index) {
             break;
     }
 
-    if (d.kind !== "evolve" && d.kind !== "fusion") Sound.play("select");
+    if (c.lucky) {
+        addNumber(p.x, p.y - 90, "☘ LUCKY ×2", "lucky");
+        G.effects.push({ kind: "pillar", t: 1, max: 1, color: "#7dffb0" });
+        addParticles(p.x, p.y, 26, "#9dffc0", 300, 5, true);
+        Sound.play("lucky");
+    } else if (d.kind !== "evolve" && d.kind !== "fusion") {
+        Sound.play("select");
+    }
 
     G.choosing = false;
     G.choices = [];
@@ -1949,6 +2308,11 @@ function updatePlayer(dt) {
     if (!p.attacking && mx !== 0) p.facingX = mx < 0 ? -1 : 1;
 
     if (p.regen > 0) p.hp = Math.min(p.maxHp, p.hp + p.regen * dt);
+    const ls = itemLv("lifesteal");
+    if (ls > 0) {
+        const cap = p.maxHp * LIFESTEAL_CAP * ls;      // 每秒可吸取的上限
+        p.lsBudget = Math.min(cap, p.lsBudget + cap * dt);
+    }
     p.invincible = Math.max(0, p.invincible - dt);
     p.attackCd = Math.max(0, p.attackCd - dt);
 
@@ -2008,6 +2372,8 @@ function updateEffects(dt) {
         q.vy *= Math.exp(-5 * dt);
     });
     G.particles = G.particles.filter((q) => q.t > 0);
+    if (G.particles.length > 450) G.particles.splice(0, G.particles.length - 450);
+    if (G.effects.length > 160) G.effects.splice(0, G.effects.length - 160);
 
     G.numbers.forEach((n) => { n.t -= dt; n.y -= 46 * dt; });
     G.numbers = G.numbers.filter((n) => n.t > 0);
@@ -2048,7 +2414,8 @@ function showDeathScreen() {
         `<span>擊殺數${tag("kills")}</span><b>${G.kills}</b>` +
         `<span>擊敗 Boss${tag("boss")}</span><b>${G.bossKills}</b>` +
         `<span>造成總傷害</span><b>${Math.round(G.damageDealt)}</b>` +
-        `<span>最長存活紀錄</span><b>${fmtTime(save.bestTime)}</b>`;
+        `<span>本局積分${tag("score")}</span><b>${G.score.toLocaleString()}</b>` +
+        `<span>排行榜名次</span><b>#${G.rankAfter}${G.rankAfter < G.rankBefore ? ` <i class="up">▲${G.rankBefore - G.rankAfter}</i>` : ""}</b>`;
     dom.deathOverlay.classList.remove("hidden");
 }
 
@@ -2365,12 +2732,100 @@ function drawEffects() {
         } else if (f.kind === "ring") {
             const cx = f.follow ? p.x : f.x;
             const cy = f.follow ? p.y : f.y;
-            ctx.globalAlpha = alpha;
+            const rr = f.r0 + (f.r1 - f.r0) * (1 - Math.pow(1 - prog, 2));
+            ctx.globalCompositeOperation = "lighter";
+            ctx.globalAlpha = alpha * 0.35;
             ctx.strokeStyle = f.color;
-            ctx.lineWidth = f.width || 3;
+            ctx.lineWidth = (f.width || 3) * 3;
             ctx.beginPath();
-            ctx.arc(cx, cy, f.r0 + (f.r1 - f.r0) * prog, 0, Math.PI * 2);
+            ctx.arc(cx, cy, rr, 0, Math.PI * 2);
             ctx.stroke();
+            ctx.globalAlpha = alpha;
+            ctx.lineWidth = f.width || 3;
+            ctx.stroke();
+        } else if (f.kind === "burst") {
+            // 爆炸閃光：白色核心 → 技能色 → 透明
+            const rr = f.r * (0.5 + 0.6 * prog);
+            const g = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, rr);
+            g.addColorStop(0, "rgba(255,255,255,0.95)");
+            g.addColorStop(0.35, f.color);
+            g.addColorStop(1, "rgba(0,0,0,0)");
+            ctx.globalCompositeOperation = "lighter";
+            ctx.globalAlpha = alpha * 0.85;
+            ctx.fillStyle = g;
+            ctx.beginPath();
+            ctx.arc(f.x, f.y, rr, 0, Math.PI * 2);
+            ctx.fill();
+        } else if (f.kind === "shards") {
+            // 冰刺向外爆開
+            ctx.translate(f.x, f.y);
+            ctx.globalCompositeOperation = "lighter";
+            ctx.globalAlpha = alpha;
+            ctx.fillStyle = f.color;
+            const ease = 1 - Math.pow(1 - prog, 3);
+            for (let i = 0; i < f.n; i++) {
+                const a = f.rot + (i / f.n) * Math.PI * 2;
+                const d = f.r * (0.25 + 0.75 * ease) * (0.8 + 0.2 * hash2(i, 3));
+                const len = 26 + 22 * hash2(i, 9);
+                ctx.save();
+                ctx.rotate(a);
+                ctx.beginPath();
+                ctx.moveTo(d + len, 0);
+                ctx.lineTo(d, -6);
+                ctx.lineTo(d - len * 0.4, 0);
+                ctx.lineTo(d, 6);
+                ctx.closePath();
+                ctx.fill();
+                ctx.restore();
+            }
+        } else if (f.kind === "cracks") {
+            // 大地裂痕
+            ctx.translate(f.x, f.y);
+            ctx.globalAlpha = Math.min(1, alpha * 1.6);
+            ctx.lineCap = "round";
+            const grow = Math.min(1, prog * 4);
+            for (let i = 0; i < f.n; i++) {
+                const a = (i / f.n) * Math.PI * 2 + hash2(i, Math.floor(f.seed)) * 0.6;
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                let x = 0, y = 0;
+                const steps = 4;
+                for (let k = 1; k <= steps; k++) {
+                    const d = f.r * grow * (k / steps);
+                    const j = (hash2(i * 7 + k, Math.floor(f.seed)) - 0.5) * 0.7;
+                    x = Math.cos(a + j) * d;
+                    y = Math.sin(a + j) * d;
+                    ctx.lineTo(x, y);
+                }
+                ctx.strokeStyle = "#1a1008";
+                ctx.lineWidth = 6;
+                ctx.stroke();
+                ctx.strokeStyle = "#ffb060";
+                ctx.lineWidth = 2;
+                ctx.globalCompositeOperation = "lighter";
+                ctx.stroke();
+                ctx.globalCompositeOperation = "source-over";
+            }
+        } else if (f.kind === "pillar") {
+            // 升級 / 幸運 / 進化：光柱
+            const w = 70 * (1 - prog * 0.5);
+            const g = ctx.createLinearGradient(p.x - w, 0, p.x + w, 0);
+            g.addColorStop(0, "rgba(0,0,0,0)");
+            g.addColorStop(0.5, f.color);
+            g.addColorStop(1, "rgba(0,0,0,0)");
+            ctx.globalCompositeOperation = "lighter";
+            ctx.globalAlpha = alpha * 0.7;
+            ctx.fillStyle = g;
+            ctx.fillRect(p.x - w, p.y - 900, w * 2, 940);
+            ctx.globalAlpha = alpha;
+            for (let i = 0; i < 10; i++) {
+                const a = i / 10 * Math.PI * 2 + G.anim * 2;
+                const rr = 40 + prog * 80;
+                ctx.fillStyle = f.color;
+                ctx.beginPath();
+                ctx.arc(p.x + Math.cos(a) * rr, p.y + Math.sin(a) * rr * 0.4 - prog * 60, 4, 0, Math.PI * 2);
+                ctx.fill();
+            }
         } else if (f.kind === "warn") {
             ctx.globalAlpha = 0.3 + prog * 0.5;
             ctx.fillStyle = "rgba(255, 90, 40, 0.25)";
@@ -2380,20 +2835,90 @@ function drawEffects() {
             ctx.arc(f.x, f.y, f.r * (0.4 + 0.6 * prog), 0, Math.PI * 2);
             ctx.fill();
             ctx.stroke();
+            if (f.meteor) {
+                // 從天而降的隕石
+                const mx = f.x + (1 - prog) * 260;
+                const my = f.y - (1 - prog) * 520;
+                ctx.globalAlpha = 1;
+                ctx.globalCompositeOperation = "lighter";
+                const tg = ctx.createLinearGradient(mx, my, mx + 120, my - 240);
+                tg.addColorStop(0, "rgba(255, 170, 60, 0.9)");
+                tg.addColorStop(1, "rgba(255, 60, 20, 0)");
+                ctx.strokeStyle = tg;
+                ctx.lineWidth = 22;
+                ctx.lineCap = "round";
+                ctx.beginPath();
+                ctx.moveTo(mx, my);
+                ctx.lineTo(mx + 120, my - 240);
+                ctx.stroke();
+                glowCircle(mx, my, 46, "rgba(255, 150, 60, 0.9)", 1);
+                ctx.globalCompositeOperation = "source-over";
+                ctx.globalAlpha = 1;
+                ctx.fillStyle = "#ffe6a0";
+                ctx.beginPath();
+                ctx.arc(mx, my, 14, 0, Math.PI * 2);
+                ctx.fill();
+            }
         } else if (f.kind === "strike") {
+            // 落雷：外層光暈 + 白色核心 + 分岔
+            const pts = [];
+            const sd = f.seed || 0;
+            let lx = f.x;
+            for (let i = 0; i <= 7; i++) {
+                const yy = f.y - 560 + (560 / 7) * i;
+                lx = i === 7 ? f.x : f.x + (hash2(i, Math.floor(sd + G.anim * 30)) - 0.5) * 50;
+                pts.push([lx, yy]);
+            }
+            const path = () => {
+                ctx.beginPath();
+                pts.forEach((q, i) => (i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])));
+            };
+            ctx.globalCompositeOperation = "lighter";
+            ctx.lineJoin = "round";
+            ctx.globalAlpha = alpha * 0.5;
+            ctx.strokeStyle = "#5ab8ff";
+            ctx.lineWidth = 16;
+            path(); ctx.stroke();
             ctx.globalAlpha = alpha;
             ctx.strokeStyle = f.color || "#e6f4ff";
-            ctx.shadowColor = "#8fd8ff";
-            ctx.shadowBlur = 16;
-            ctx.lineWidth = 4;
-            ctx.beginPath();
-            ctx.moveTo(f.x + rand(-12, 12), f.y - 520);
-            for (let i = 1; i < 6; i++) {
-                ctx.lineTo(f.x + rand(-16, 16), f.y - 520 + (520 / 6) * i);
-            }
-            ctx.lineTo(f.x, f.y);
-            ctx.stroke();
+            ctx.lineWidth = 6;
+            path(); ctx.stroke();
+            ctx.strokeStyle = "#ffffff";
+            ctx.lineWidth = 2;
+            path(); ctx.stroke();
+            // 分岔
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = "#bfe8ff";
+            [2, 4].forEach((k) => {
+                const q = pts[k];
+                const dir = hash2(k, Math.floor(sd)) < 0.5 ? -1 : 1;
+                ctx.beginPath();
+                ctx.moveTo(q[0], q[1]);
+                ctx.lineTo(q[0] + dir * 40, q[1] + 40);
+                ctx.lineTo(q[0] + dir * 55, q[1] + 90);
+                ctx.stroke();
+            });
+            glowCircle(f.x, f.y, 70, "rgba(170, 220, 255, 0.9)", alpha);
         } else if (f.kind === "levelup") {
+            ctx.globalCompositeOperation = "lighter";
+            glowCircle(p.x, p.y, 60 + prog * 120, "rgba(255, 215, 0, 0.5)", alpha * 0.8);
+            ctx.globalCompositeOperation = "source-over";
+            // 旋轉光芒
+            ctx.save();
+            ctx.translate(p.x, p.y);
+            ctx.rotate(prog * 2);
+            ctx.globalAlpha = alpha * 0.6;
+            ctx.fillStyle = "#ffe680";
+            for (let i = 0; i < 12; i++) {
+                ctx.rotate(Math.PI / 6);
+                ctx.beginPath();
+                ctx.moveTo(0, -20);
+                ctx.lineTo(6, -60 - prog * 90);
+                ctx.lineTo(-6, -60 - prog * 90);
+                ctx.closePath();
+                ctx.fill();
+            }
+            ctx.restore();
             ctx.globalAlpha = alpha;
             ctx.strokeStyle = "#ffd700";
             ctx.lineWidth = 5;
@@ -2413,10 +2938,27 @@ function drawEffects() {
 
 function drawParticles() {
     G.particles.forEach((q) => {
+        if (q.glow) return;
         ctx.globalAlpha = clamp(q.t / q.max, 0, 1);
         ctx.fillStyle = q.color;
         ctx.fillRect(q.x - q.size / 2, q.y - q.size / 2, q.size, q.size);
     });
+    // 發光粒子：疊加混色
+    ctx.globalCompositeOperation = "lighter";
+    G.particles.forEach((q) => {
+        if (!q.glow) return;
+        const a = clamp(q.t / q.max, 0, 1);
+        ctx.globalAlpha = a;
+        ctx.fillStyle = q.color;
+        ctx.beginPath();
+        ctx.arc(q.x, q.y, q.size * (0.5 + a * 0.6), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = a * 0.35;
+        ctx.beginPath();
+        ctx.arc(q.x, q.y, q.size * 1.8, 0, Math.PI * 2);
+        ctx.fill();
+    });
+    ctx.globalCompositeOperation = "source-over";
     ctx.globalAlpha = 1;
 }
 
@@ -2432,6 +2974,8 @@ function drawNumbers() {
         else if (n.type === "heal") { color = "#7dff9a"; size = 22; }
         else if (n.type === "hurt") { color = "#ff3b3b"; size = 28; }
         else if (n.type === "poison") { color = "#8be05a"; size = 19; }
+        else if (n.type === "lucky") { color = "#7dffb0"; size = 34; }
+        if (!save.numbers && n.type !== "lucky" && n.type !== "heal" && n.type !== "hurt") return;
         ctx.save();
         ctx.globalAlpha = alpha;
         ctx.font = `bold ${size}px Arial`;
@@ -2537,8 +3081,9 @@ function renderGame() {
     ctx.clearRect(0, 0, VIEW_W, VIEW_H);
 
     const cam = G.cam;
-    const sx = G.shake > 0 ? rand(-G.shake, G.shake) * 0.5 : 0;
-    const sy = G.shake > 0 ? rand(-G.shake, G.shake) * 0.5 : 0;
+    const shaking = G.shake > 0 && save.shake;
+    const sx = shaking ? rand(-G.shake, G.shake) * 0.5 : 0;
+    const sy = shaking ? rand(-G.shake, G.shake) * 0.5 : 0;
 
     ctx.save();
     ctx.scale(zoom, zoom);
@@ -2583,24 +3128,146 @@ function updateHud() {
     setText(dom.hudKills, "kills", String(G.kills));
     setText(dom.hudBest, "best", fmtTime(Math.max(save.bestTime, G.time)));
 
-    let html = `<span class="chip ${G.evolved ? "evo" : "weapon"}">${weaponLabel()}</span>`;
-    Object.keys(G.items).forEach((id) => {
-        if (G.items[id] > 0) html += `<span class="chip">${ITEM_NAMES[id]} Lv.${G.items[id]}</span>`;
+    const html = ownedChipsHTML();
+    if (hudCache.passives !== html) {
+        hudCache.passives = html;
+        dom.passives.innerHTML = html;
+        if (tipState.key && !dom.passives.querySelector(`[data-tip="${tipState.key}"]`) && tipState.from === dom.passives) hideTip();
+    }
+}
+
+/* 已持有的武器 / 技能 / 道具 → 可點擊（或滑鼠移入）查看介紹的晶片 */
+function ownedChipsHTML() {
+    const chip = (cls, tip, kind, id, label) =>
+        `<button type="button" class="chip ${cls}" data-tip="${tip}">${badgeHTML(kind, id, "mini")}<span>${label}</span></button>`;
+    let html = chip(G.evolved ? "evo" : "weapon", "weapon:", G.evolved ? "evolve" : "weapon", G.evolved ? "evolve" : "weapon", weaponLabel());
+    Object.keys(G.ults).forEach((id) => {
+        const f = FUSIONS.find((x) => x.id === id);
+        html += chip("evo", "ult:" + id, "fusion", id, f.name);
     });
     Object.keys(G.skills).forEach((id) => {
         const lv = G.skills[id].lv;
         const maxed = lv >= SKILL_MAX;
         const ready = maxed && FUSIONS.some((f) => (f.a === id || f.b === id) && fusionReady(f));
-        html += `<span class="chip ${ready ? "fusion-ready" : (maxed ? "max" : "skill")}">${SKILLS[id].icon} ${SKILLS[id].name} ${ready ? "可融合" : (maxed ? "MAX" : "Lv." + lv)}</span>`;
+        html += chip(ready ? "fusion-ready" : (maxed ? "max" : "skill"), "skill:" + id, "skill", id,
+            `${SKILLS[id].name} ${ready ? "可融合" : (maxed ? "MAX" : "Lv." + lv)}`);
     });
-    Object.keys(G.ults).forEach((id) => {
+    Object.keys(G.items).forEach((id) => {
+        if (G.items[id] > 0) html += chip("item", "item:" + id, "item", id, `${ITEM_NAMES[id]} Lv.${G.items[id]}`);
+    });
+    html += chip("stats", "stats:", "stat", "attack", "屬性");
+    return html;
+}
+
+/* ---------- 技能介紹浮動視窗 ---------- */
+const tipState = { key: null, pinned: false, from: null, timer: 0 };
+
+function tipContent(key) {
+    const [type, id] = key.split(":");
+    const p = G.player;
+    const ch = G.character;
+    let kind = type, iconId = id, title = "", tag = "", body = "", foot = "";
+    if (type === "skill") {
+        const sk = SKILLS[id];
+        const lv = skillLv(id);
+        title = sk.name;
+        tag = `主動技能 · Lv.${lv}${lv >= SKILL_MAX ? " (MAX)" : ""}`;
+        body = sk.text(lv);
+        if (lv < SKILL_MAX) foot += `<div class="tip-next"><b>下一級</b>${sk.text(lv + 1)}</div>`;
+        const fus = FUSIONS.filter((f) => f.a === id || f.b === id).map((f) => {
+            const other = f.a === id ? f.b : f.a;
+            return `<li>${G.ults[f.id] ? "✔ " : ""}${SKILLS[other].name} <span>→</span> <b>${f.name}</b></li>`;
+        }).join("");
+        foot += `<div class="tip-fusion"><b>融合配方</b>（兩者皆滿級）<ul>${fus}</ul></div>`;
+    } else if (type === "ult") {
         const f = FUSIONS.find((x) => x.id === id);
-        html += `<span class="chip evo">${f.icon} ${f.name}</span>`;
-    });
-    if (hudCache.passives !== html) {
-        hudCache.passives = html;
-        dom.passives.innerHTML = html;
+        kind = "fusion";
+        title = f.name;
+        tag = "終極技能";
+        body = f.text;
+        foot = `<div class="tip-next"><b>來源</b>${SKILLS[f.a].name} + ${SKILLS[f.b].name}</div>`;
+    } else if (type === "item") {
+        const def = UPGRADES.find((u) => u.id === id);
+        const lv = itemLv(id);
+        title = def.name;
+        tag = `被動道具 · Lv.${lv}${lv >= def.max ? " (MAX)" : ""}`;
+        body = def.text(lv);
+        if (lv < def.max) foot = `<div class="tip-next"><b>下一級</b>${def.text(lv + 1)}</div>`;
+    } else if (type === "weapon") {
+        kind = G.evolved ? "evolve" : "weapon";
+        iconId = kind;
+        title = G.evolved ? ch.evoName : ch.weaponName;
+        tag = G.evolved ? "已進化武器" : `主武器 · Lv.${G.weaponLevel} / 4`;
+        body = G.evolved ? ch.evoText : ch.weaponUp;
+        if (!G.evolved) foot = `<div class="tip-next"><b>進化條件</b>武器 Lv.4 + ${ITEM_NAMES[ch.evoNeeds]} → ${ch.evoName}</div>`;
+    } else if (type === "stats") {
+        kind = "stat"; iconId = "attack";
+        title = "角色屬性";
+        tag = `${ch.title} · LV.${p.level}`;
+        body =
+            `<div class="tip-stats">` +
+            `<span>攻擊傷害</span><b>${pct(p.dmgMult)}</b>` +
+            `<span>攻擊冷卻</span><b>${cooldownNow().toFixed(2)}s</b>` +
+            `<span>暴擊率</span><b>${pct(p.crit)}</b>` +
+            `<span>暴擊傷害</span><b>${pct(p.critMult)}</b>` +
+            `<span>移動速度</span><b>${Math.round(playerSpeed())}</b>` +
+            `<span>攻擊範圍</span><b>${pct(p.areaMult)}</b>` +
+            `<span>生命回復</span><b>${p.regen.toFixed(1)}/s</b>` +
+            `<span>傷害減免</span><b>${pct(damageReduction())}</b>` +
+            `<span>幸運機率</span><b>${pct(luckChance(false))}</b>` +
+            `</div>`;
     }
+    return `<div class="tip-head">${badgeHTML(kind, iconId, "mid")}<div><div class="tip-title">${title}</div><div class="tip-tag">${tag}</div></div></div>` +
+        `<div class="tip-body">${body}</div>${foot}`;
+}
+
+function showTip(el, pinned) {
+    if (!G) return;
+    const key = el.dataset.tip;
+    dom.tip.innerHTML = tipContent(key);
+    dom.tip.classList.remove("hidden");
+    tipState.key = key;
+    tipState.pinned = pinned;
+    tipState.from = el.parentElement;
+    // 位置：晶片上方，放不下就放下方；水平方向限制在視窗內
+    const r = el.getBoundingClientRect();
+    const tw = dom.tip.offsetWidth;
+    const th = dom.tip.offsetHeight;
+    let x = clamp(r.left + r.width / 2 - tw / 2, 8, window.innerWidth - tw - 8);
+    let y = r.top - th - 10;
+    if (y < 8) y = Math.min(r.bottom + 10, window.innerHeight - th - 8);
+    dom.tip.style.left = x + "px";
+    dom.tip.style.top = Math.max(8, y) + "px";
+    clearTimeout(tipState.timer);
+    if (pinned && IS_TOUCH && !G.paused) tipState.timer = setTimeout(hideTip, 5000);
+}
+
+function hideTip() {
+    tipState.key = null;
+    tipState.pinned = false;
+    clearTimeout(tipState.timer);
+    if (dom.tip) dom.tip.classList.add("hidden");
+}
+
+function bindTipContainer(container) {
+    container.addEventListener("mouseover", (e) => {
+        const el = e.target.closest("[data-tip]");
+        if (!el || tipState.pinned) return;
+        showTip(el, false);
+    });
+    container.addEventListener("mouseout", (e) => {
+        const el = e.target.closest("[data-tip]");
+        if (!el || tipState.pinned) return;
+        if (e.relatedTarget && el.contains(e.relatedTarget)) return;
+        hideTip();
+    });
+    container.addEventListener("click", (e) => {
+        const el = e.target.closest("[data-tip]");
+        if (!el) return;
+        e.stopPropagation();
+        if (tipState.pinned && tipState.key === el.dataset.tip) hideTip();
+        else showTip(el, true);
+    });
 }
 
 /* ============================== 選角畫面動畫 ============================== */
@@ -2626,6 +3293,9 @@ function togglePause() {
     if (scene !== "playing" || !G || G.dead || G.choosing) return;
     G.paused = !G.paused;
     clearKeys();
+    hideTip();
+    if (G.paused) dom.pauseSkills.innerHTML = ownedChipsHTML();
+    else closeModal(dom.settings);
     dom.pauseOverlay.classList.toggle("hidden", !G.paused);
     Sound.play("click");
 }
@@ -2633,6 +3303,7 @@ function togglePause() {
 function updateSoundButtons() {
     dom.soundBtn.classList.toggle("off", save.muted);
     dom.pauseSoundBtn.textContent = "音效：" + (save.muted ? "關" : "開");
+    if (dom.mute) dom.mute.checked = !save.muted;
 }
 
 function toggleMute() {
@@ -2640,6 +3311,64 @@ function toggleMute() {
     writeSave();
     updateSoundButtons();
     Sound.play("click");
+}
+
+/* ============================== 視窗（設定 / 排行榜） ============================== */
+function anyModalOpen() {
+    return !dom.settings.classList.contains("hidden") || !dom.board.classList.contains("hidden");
+}
+
+function openModal(el) {
+    hideTip();
+    // 遊戲中開啟視窗時自動暫停
+    if (scene === "playing" && G && !G.dead && !G.choosing && !G.paused) togglePause();
+    el.classList.remove("hidden");
+    Sound.play("click");
+}
+
+function closeModal(el) {
+    if (!el || el.classList.contains("hidden")) return;
+    el.classList.add("hidden");
+}
+
+/* ---------- 設定 ---------- */
+function fullscreenSupported() {
+    const d = document.documentElement;
+    return !!(d.requestFullscreen || d.webkitRequestFullscreen);
+}
+function isFullscreen() {
+    return !!(document.fullscreenElement || document.webkitFullscreenElement);
+}
+function setFullscreen(on) {
+    try {
+        if (on && !isFullscreen()) {
+            const d = document.documentElement;
+            const req = d.requestFullscreen || d.webkitRequestFullscreen;
+            const r = req.call(d);
+            if (r && r.catch) r.catch(() => syncSettingsUI());
+        } else if (!on && isFullscreen()) {
+            const ex = document.exitFullscreen || document.webkitExitFullscreen;
+            ex.call(document);
+        }
+    } catch (e) { /* 不支援 */ }
+}
+
+function syncSettingsUI() {
+    const v = Math.round(save.volume * 100);
+    dom.volume.value = v;
+    dom.volumeVal.textContent = v + "%";
+    dom.volume.style.setProperty("--fill", v + "%");
+    dom.mute.checked = !save.muted;
+    dom.shake.checked = !!save.shake;
+    dom.numbers.checked = !!save.numbers;
+    dom.fullscreen.checked = isFullscreen();
+    dom.fullscreen.disabled = !fullscreenSupported();
+    dom.playerName.value = save.playerName || "";
+}
+
+function openSettings() {
+    syncSettingsUI();
+    openModal(dom.settings);
 }
 
 /* ============================== 主迴圈 ============================== */
@@ -2668,6 +3397,12 @@ window.addEventListener("keydown", (event) => {
     if (scene === "playing" &&
         ["arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(key)) {
         event.preventDefault();
+    }
+
+    // 視窗開啟時：ESC 關閉視窗，其餘按鍵不影響遊戲
+    if (anyModalOpen()) {
+        if (key === "escape") { event.preventDefault(); closeModal(dom.settings); closeModal(dom.board); }
+        return;
     }
 
     // ESC：回到獨立主頁
@@ -2809,6 +3544,51 @@ $("pauseRestartButton").addEventListener("click", restartRun);
 $("pauseHomeButton").addEventListener("click", exitToHome);
 $("deathRestartButton").addEventListener("click", restartRun);
 $("deathHomeButton").addEventListener("click", exitToHome);
+
+/* 設定 / 排行榜 */
+$("homeSettingsButton").addEventListener("click", openSettings);
+$("homeBoardButton").addEventListener("click", openBoard);
+$("settingsButton").addEventListener("click", openSettings);
+$("pauseSettingsButton").addEventListener("click", openSettings);
+$("deathBoardButton").addEventListener("click", openBoard);
+document.querySelectorAll("[data-close]").forEach((b) => {
+    b.addEventListener("click", () => { closeModal($(b.dataset.close)); Sound.play("click"); });
+});
+[dom.settings, dom.board].forEach((m) => {
+    m.addEventListener("click", (e) => { if (e.target === m) closeModal(m); });
+});
+
+dom.volume.addEventListener("input", () => {
+    save.volume = clamp(Number(dom.volume.value) / 100, 0, 1);
+    dom.volumeVal.textContent = dom.volume.value + "%";
+    dom.volume.style.setProperty("--fill", dom.volume.value + "%");
+    Sound.applyVolume();
+});
+dom.volume.addEventListener("change", () => { writeSave(); Sound.play("select"); });
+dom.mute.addEventListener("change", () => {
+    save.muted = !dom.mute.checked;
+    writeSave();
+    updateSoundButtons();
+    Sound.play("click");
+});
+dom.shake.addEventListener("change", () => { save.shake = dom.shake.checked; writeSave(); });
+dom.numbers.addEventListener("change", () => { save.numbers = dom.numbers.checked; writeSave(); });
+dom.fullscreen.addEventListener("change", () => setFullscreen(dom.fullscreen.checked));
+dom.playerName.addEventListener("change", () => {
+    save.playerName = dom.playerName.value.trim().slice(0, 12) || "冒險者";
+    dom.playerName.value = save.playerName;
+    writeSave();
+});
+["fullscreenchange", "webkitfullscreenchange"].forEach((ev) => {
+    document.addEventListener(ev, () => { dom.fullscreen.checked = isFullscreen(); onViewportChange(); });
+});
+
+/* 技能介紹浮窗 */
+bindTipContainer(dom.passives);
+bindTipContainer(dom.pauseSkills);
+document.addEventListener("pointerdown", (e) => {
+    if (tipState.key && !e.target.closest("[data-tip]") && !e.target.closest("#skillTip")) hideTip();
+});
 
 /* ============================== 啟動 ============================== */
 dom.startBtn.disabled = true;

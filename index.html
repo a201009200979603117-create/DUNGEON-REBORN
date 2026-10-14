@@ -4,10 +4,39 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>DUNGEON REBORN</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&display=swap">
     <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
+<!-- 技能圖示共用漸層（不可設 display:none，否則漸層不會渲染） -->
+<svg id="iconDefs" width="0" height="0" aria-hidden="true" focusable="false">
+    <defs>
+        <radialGradient id="gFire" cx="60%" cy="35%" r="70%">
+            <stop offset="0" stop-color="#fff3b0"/><stop offset=".45" stop-color="#ffab3a"/><stop offset="1" stop-color="#e2401c"/>
+        </radialGradient>
+        <linearGradient id="gIce" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#5cc3ff"/>
+        </linearGradient>
+        <linearGradient id="gBolt" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#fffbe0"/><stop offset=".5" stop-color="#ffe04a"/><stop offset="1" stop-color="#ff9d1a"/>
+        </linearGradient>
+        <linearGradient id="gSteel" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#ffffff"/><stop offset=".55" stop-color="#b9c8ea"/><stop offset="1" stop-color="#6b7aa3"/>
+        </linearGradient>
+        <radialGradient id="gPoison" cx="40%" cy="35%" r="70%">
+            <stop offset="0" stop-color="#d8ff9a"/><stop offset=".6" stop-color="#6fd23c"/><stop offset="1" stop-color="#2c7a18"/>
+        </radialGradient>
+        <linearGradient id="gEarth" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#d9a95f"/><stop offset="1" stop-color="#5a3a18"/>
+        </linearGradient>
+        <linearGradient id="gArcane" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#bfe8ff"/><stop offset=".5" stop-color="#4f9bff"/><stop offset="1" stop-color="#3a3fbf"/>
+        </linearGradient>
+    </defs>
+</svg>
+
 <main class="game-container">
 
     <header class="game-header">
@@ -17,11 +46,22 @@
 
     <!-- 獨立主頁 -->
     <section id="homeScreen" class="home-screen">
+        <div class="home-cover" aria-hidden="true"></div>
+        <div class="home-embers" aria-hidden="true">
+            <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+        </div>
         <div class="home-content">
-            <p class="home-eyebrow">A DARK FANTASY ADVENTURE</p>
+            <p class="home-eyebrow">✦ A DARK FANTASY ROGUELIKE ✦</p>
             <h1 class="home-title">DUNGEON <span>REBORN</span></h1>
             <p class="home-description">深入無盡的地牢，撐過一波又一波的史萊姆。</p>
-            <button id="homeStartButton" class="home-start-button">開始遊戲</button>
+
+            <div class="home-actions">
+                <button id="homeStartButton" class="home-start-button">開始遊戲</button>
+                <div class="home-sub-actions">
+                    <button id="homeBoardButton" class="btn btn-dark btn-icon"><span>🏆</span>排行榜</button>
+                    <button id="homeSettingsButton" class="btn btn-dark btn-icon"><span>⚙</span>設定</button>
+                </div>
+            </div>
 
             <div class="home-records" id="homeRecords"></div>
 
@@ -98,6 +138,7 @@
             <div class="status-actions">
                 <button id="pauseButton" class="icon-btn" title="暫停 (P)">❚❚</button>
                 <button id="soundButton" class="icon-btn" title="音效 (M)">♪</button>
+                <button id="settingsButton" class="icon-btn" title="設定">⚙</button>
             </div>
         </div>
 
@@ -119,19 +160,25 @@
                     <h2 class="upgrade-title" id="upgradeTitle">LEVEL UP</h2>
                     <p class="upgrade-subtitle" id="upgradeSubtitle">選擇一項能力，繼續你的冒險</p>
                     <div class="upgrade-cards" id="upgradeCards"></div>
-                    <p class="upgrade-hint">點擊卡片，或按下 1、2、3 選擇</p>
+                    <p class="upgrade-hint">點擊卡片，或按下 1、2、3 選擇　·　☘ 幸運卡：效果 ×2 / 一次升兩級</p>
                 </div>
             </div>
 
             <!-- 暫停選單 -->
             <div id="pauseOverlay" class="overlay hidden">
-                <div class="menu-panel">
+                <div class="menu-panel pause-panel">
                     <h2 class="menu-title">PAUSED</h2>
-                    <p class="menu-sub">遊戲已暫停</p>
+                    <p class="menu-sub">遊戲已暫停　·　點擊下方圖示查看介紹</p>
+                    <div class="pause-skills" id="pauseSkills"></div>
                     <button id="resumeButton" class="btn btn-gold">繼續遊戲</button>
-                    <button id="pauseRestartButton" class="btn btn-dark">重新開始</button>
-                    <button id="pauseSoundButton" class="btn btn-dark">音效：開</button>
-                    <button id="pauseHomeButton" class="btn btn-dark">回到主頁</button>
+                    <div class="menu-row">
+                        <button id="pauseRestartButton" class="btn btn-dark">重新開始</button>
+                        <button id="pauseSettingsButton" class="btn btn-dark">⚙ 設定</button>
+                    </div>
+                    <div class="menu-row">
+                        <button id="pauseSoundButton" class="btn btn-dark">音效：開</button>
+                        <button id="pauseHomeButton" class="btn btn-dark">回到主頁</button>
+                    </div>
                 </div>
             </div>
 
@@ -142,7 +189,10 @@
                     <p class="menu-sub">你倒在了地牢之中</p>
                     <div class="death-stats" id="deathStats"></div>
                     <button id="deathRestartButton" class="btn btn-gold">重新開始 (Enter)</button>
-                    <button id="deathHomeButton" class="btn btn-dark">回到主頁</button>
+                    <div class="menu-row">
+                        <button id="deathBoardButton" class="btn btn-dark">🏆 排行榜</button>
+                        <button id="deathHomeButton" class="btn btn-dark">回到主頁</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -153,6 +203,74 @@
         DUNGEON REBORN <span>•</span> BEGIN YOUR ADVENTURE
     </footer>
 </main>
+
+<!-- 設定 -->
+<div id="settingsModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <div class="modal-panel">
+        <button class="modal-close" data-close="settingsModal" aria-label="關閉">✕</button>
+        <p class="modal-eyebrow">OPTIONS</p>
+        <h2 class="modal-title" id="settingsTitle">設定</h2>
+
+        <div class="set-group">
+            <div class="set-group-title">音效</div>
+            <label class="set-row">
+                <span class="set-label">音效開關</span>
+                <span class="switch"><input type="checkbox" id="setMute"><i></i></span>
+            </label>
+            <div class="set-row">
+                <span class="set-label">音效大小</span>
+                <span class="set-slider">
+                    <input type="range" id="setVolume" min="0" max="100" step="1">
+                    <b id="setVolumeVal">80%</b>
+                </span>
+            </div>
+        </div>
+
+        <div class="set-group">
+            <div class="set-group-title">畫面</div>
+            <label class="set-row">
+                <span class="set-label">全螢幕<small>也可按 F11（電腦版）</small></span>
+                <span class="switch"><input type="checkbox" id="setFullscreen"><i></i></span>
+            </label>
+            <label class="set-row">
+                <span class="set-label">畫面震動</span>
+                <span class="switch"><input type="checkbox" id="setShake"><i></i></span>
+            </label>
+            <label class="set-row">
+                <span class="set-label">顯示傷害數字</span>
+                <span class="switch"><input type="checkbox" id="setNumbers"><i></i></span>
+            </label>
+        </div>
+
+        <div class="set-group">
+            <div class="set-group-title">玩家</div>
+            <label class="set-row">
+                <span class="set-label">排行榜名稱</span>
+                <input type="text" id="setName" class="set-input" maxlength="12" placeholder="冒險者">
+            </label>
+        </div>
+
+        <button class="btn btn-gold modal-done" data-close="settingsModal">完成</button>
+    </div>
+</div>
+
+<!-- 排行榜（虛擬資料） -->
+<div id="boardModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="boardTitle">
+    <div class="modal-panel board-panel">
+        <button class="modal-close" data-close="boardModal" aria-label="關閉">✕</button>
+        <p class="modal-eyebrow">HALL OF FAME</p>
+        <h2 class="modal-title" id="boardTitle">排行榜</h2>
+        <div class="board-me" id="boardMe"></div>
+        <div class="board-head">
+            <span>名次</span><span>玩家</span><span class="b-char">職業</span><span class="b-time">存活</span><span class="b-wave">波次</span><span>積分</span>
+        </div>
+        <ol class="board-list" id="boardList"></ol>
+        <p class="board-note">積分 = 存活秒數×8 + 擊殺×6 + 等級×40 + Boss×600 + 波次加成</p>
+    </div>
+</div>
+
+<!-- 技能介紹浮窗 -->
+<div id="skillTip" class="skill-tip hidden" role="tooltip"></div>
 
 <!-- 觸控虛擬搖桿 -->
 <div id="joystick" class="joystick hidden">

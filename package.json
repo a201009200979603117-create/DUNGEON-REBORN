@@ -1,0 +1,43 @@
+{
+  "name": "dungeon-reborn",
+  "version": "1.0.0",
+  "description": "DUNGEON REBORN - Dark Fantasy Roguelike",
+  "main": "main.js",
+  "author": "Developer",
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^39.0.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.dungeonreborn.game",
+    "productName": "DUNGEON REBORN",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.js",
+      "index.html",
+      "style.css",
+      "game.js",
+      "upgrade-ui.js",
+      "assets/**/*",
+      "images/**/*",
+      "audio/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}
