@@ -7,7 +7,7 @@ https://a201009200979603117-create.github.io/DUNGEON-REBORN/
 
 ## 下載
 到 [Releases](../../releases/latest) 下載：
-- **Windows**：`DUNGEON REBORN Setup 1.0.0.exe`
+- **Windows**：`DUNGEON.REBORN.Setup.1.0.0.exe`
 - **Android**：`DUNGEON-REBORN-1.0.0.apk`（需允許安裝未知來源應用程式）
 
 ## 操作
