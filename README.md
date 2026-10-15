@@ -3,7 +3,7 @@
 暗黑奇幻風格的 Roguelike 生存遊戲：深入地牢、撐過一波又一波怪物，擊敗 Boss 拿寶藏。
 
 ## 線上玩
-https://a201009200979603117-create.github.io/dungeon-reborn/
+https://a201009200979603117-create.github.io/DUNGEON-REBORN/
 
 ## 下載
 到 [Releases](../../releases/latest) 下載：
