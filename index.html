@@ -70,7 +70,7 @@
                 WASD / 方向鍵 移動　·　自動攻擊　·　P 暫停　·　M 靜音　·　ESC 回主頁
             </p>
             <p class="home-help touch-only">
-                手指在畫面上拖曳即可移動　·　自動攻擊　·　右上 ❚❚ 暫停選單（可回主頁）　·　建議橫向遊玩
+                手指在畫面上拖曳即可移動　·　自動攻擊　·　右上 ❚❚ 暫停選單（可回主頁）　·　設定裡可切換直式 / 橫式
             </p>
             <p class="home-version">EARLY DEMO</p>
         </div>
@@ -91,7 +91,6 @@
                 <p class="character-name">戰士</p>
                 <p class="character-description">高生命、近身大範圍揮砍，擊退力強。</p>
                 <p class="character-stats">HP 140　傷害 24　射程 近</p>
-                <span class="select-label">選擇角色</span>
             </button>
 
             <button class="character-card" data-character="lancer">
@@ -100,7 +99,6 @@
                 <p class="character-name">槍兵</p>
                 <p class="character-description">長槍直線貫穿，一次刺穿整排敵人。</p>
                 <p class="character-stats">HP 110　傷害 20　射程 中</p>
-                <span class="select-label">選擇角色</span>
             </button>
 
             <button class="character-card" data-character="archer">
@@ -109,7 +107,6 @@
                 <p class="character-name">弓箭手</p>
                 <p class="character-description">遠距離追蹤箭矢，脆弱但輸出穩定。</p>
                 <p class="character-stats">HP 85　傷害 15　射程 遠</p>
-                <span class="select-label">選擇角色</span>
             </button>
         </div>
 
@@ -233,6 +230,14 @@
                 <span class="set-label">全螢幕<small>也可按 F11（電腦版）</small></span>
                 <span class="switch"><input type="checkbox" id="setFullscreen"><i></i></span>
             </label>
+            <div class="set-row" id="setOrientRow">
+                <span class="set-label">螢幕方向<small>手機 / 平板用</small></span>
+                <span class="seg" id="setOrient" role="group" aria-label="螢幕方向">
+                    <button type="button" data-orient="portrait">直式</button>
+                    <button type="button" data-orient="landscape">橫式</button>
+                    <button type="button" data-orient="auto">自動</button>
+                </span>
+            </div>
             <label class="set-row">
                 <span class="set-label">畫面震動</span>
                 <span class="switch"><input type="checkbox" id="setShake"><i></i></span>

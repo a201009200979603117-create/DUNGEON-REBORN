@@ -233,18 +233,11 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--gold-light)
 }
 .character-art canvas { position: relative; z-index: 1; display: block; width: 192px; height: 192px; max-width: 100%; image-rendering: pixelated; }
 
-.character-card h2 { margin: 12px 0 5px; color: var(--gold-light); font-family: var(--title-font); font-size: 21px; letter-spacing: 4px; }
-.character-name { margin: 0 0 10px; font-size: 15px; }
-.character-description { min-height: 44px; margin: 0 0 8px; color: var(--muted); font-size: 12px; line-height: 1.9; }
-.character-stats { margin: 0 0 16px; color: #d4b77c; font-size: 12px; letter-spacing: 1px; }
+.character-card h2 { margin: 12px 0 6px; color: var(--gold-light); font-family: var(--title-font); font-size: 28px; letter-spacing: 4px; }
+.character-name { margin: 0 0 12px; font-size: 22px; font-weight: 700; }
+.character-description { min-height: 56px; margin: 0 0 10px; color: #b9b9c6; font-size: 16px; line-height: 1.7; }
+.character-stats { margin: 0 0 6px; color: #e3c585; font-size: 16px; font-weight: 700; letter-spacing: 1px; }
 
-.select-label {
-    display: inline-block; padding: 8px 22px; color: #bfc0ca; font-size: 12px; letter-spacing: 2px;
-    background: #ffffff05; border: 1px solid #ffffff30; border-radius: 6px;
-    transition: color var(--transition), background var(--transition), border-color var(--transition);
-}
-.character-card:hover .select-label { border-color: var(--border-gold); }
-.character-card.selected .select-label { color: #17130b; background: var(--gold); border-color: var(--gold); }
 
 .selection-footer {
     display: flex; align-items: center; justify-content: space-between; gap: 20px;
@@ -632,8 +625,10 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--gold-light)
     .character-card { padding: 16px 10px; }
     .character-art { height: 160px; }
     .character-art canvas { width: 160px; height: 160px; }
-    .character-card h2 { font-size: 17px; letter-spacing: 2px; }
-    .character-description { font-size: 11px; }
+    .character-card h2 { font-size: 22px; letter-spacing: 2px; }
+    .character-name { font-size: 18px; }
+    .character-description { font-size: 14px; }
+    .character-stats { font-size: 14px; }
     .home-records { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
@@ -655,11 +650,11 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--gold-light)
     }
     .character-art { grid-column: 1; grid-row: 1 / span 5; height: 120px; margin: 0; }
     .character-art canvas { width: 112px; height: 112px; }
-    .character-card h2, .character-name, .character-description, .character-stats, .select-label { grid-column: 2; }
-    .character-card h2 { margin: 0 0 3px; font-size: 16px; }
-    .character-name { margin-bottom: 6px; font-size: 13px; }
-    .character-description { min-height: 0; margin-bottom: 6px; font-size: 11px; }
-    .select-label { justify-self: start; padding: 6px 12px; font-size: 10px; }
+    .character-card h2, .character-name, .character-description, .character-stats { grid-column: 2; }
+    .character-card h2 { margin: 0 0 3px; font-size: 21px; }
+    .character-name { margin-bottom: 6px; font-size: 17px; }
+    .character-description { min-height: 0; margin-bottom: 6px; font-size: 14px; line-height: 1.5; }
+    .character-stats { margin-bottom: 0; font-size: 14px; }
     .selection-footer { flex-direction: column; align-items: stretch; gap: 10px; }
     #gameStatusBar { padding: 10px; gap: 10px; flex-wrap: wrap; }
     .status-level { font-size: 14px; min-width: 52px; height: 34px; }
@@ -813,4 +808,55 @@ body.playing { overscroll-behavior: none; }
     .upgrade-number { display: none; }
     .lucky-badge { grid-column: 2; justify-self: start; margin-top: 4px; font-size: 10px; }
     .upgrade-card-action, .upgrade-eyebrow, .upgrade-hint { display: none; }
+}
+
+/* ---------- 設定：螢幕方向切換 ---------- */
+.seg { display: inline-flex; border: 1px solid var(--border-gold, #d9b66f55); border-radius: 8px; overflow: hidden; }
+.seg button {
+    padding: 8px 14px; color: #bfc0ca; background: transparent; border: 0; border-right: 1px solid #ffffff18;
+    font-size: 14px; cursor: pointer;
+}
+.seg button:last-child { border-right: 0; }
+.seg button.on { color: #17130b; background: var(--gold, #d9b66f); font-weight: 700; }
+
+/* ==================================================
+   橫向手機（螢幕高度很矮）：主頁 / 選角 / 設定都縮到一屏內，不用捲動
+================================================== */
+@media (orientation: landscape) and (max-height: 520px) {
+    html, body { min-height: 0; }
+    .selection-panel { padding: 6px 0 4px; }
+    .section-heading { margin-bottom: 8px; }
+    .eyebrow, .subtitle { display: none; }
+    .section-heading h1 { font-size: 22px; letter-spacing: 3px; }
+    .character-list { gap: 10px; }
+    .character-card {
+        display: grid; grid-template-columns: 84px minmax(0, 1fr); column-gap: 10px; align-items: center;
+        padding: 8px 10px; text-align: left;
+    }
+    .character-card:hover { transform: none; }
+    .character-art { grid-column: 1; grid-row: 1 / span 4; height: 84px; margin: 0; }
+    .character-art canvas { width: 84px; height: 84px; }
+    .character-art::after { bottom: 6px; width: 60px; height: 8px; }
+    .character-card h2, .character-name, .character-description, .character-stats { grid-column: 2; }
+    .character-card h2 { margin: 0; font-size: 18px; letter-spacing: 2px; }
+    .character-name { margin: 0 0 2px; font-size: 16px; }
+    .character-description { min-height: 0; margin: 0 0 2px; font-size: 12px; line-height: 1.4; }
+    .character-stats { margin: 0; font-size: 12px; letter-spacing: 0; }
+    .selection-footer { margin-top: 8px; padding-top: 8px; gap: 10px; flex-direction: row; }
+    .selection-footer .btn { width: auto; padding: 8px 16px; }
+    #selectionStatus { font-size: 13px; }
+    .home-screen { padding: 8px 14px; min-height: calc(100dvh - 16px); }
+    .home-eyebrow { font-size: 10px; margin: 0; }
+    .home-title { font-size: 34px; margin: 2px 0; }
+    .home-description { margin: 2px 0 8px; font-size: 13px; }
+    .home-start-button { padding: 10px 40px; font-size: 18px; }
+    .home-records { margin-top: 8px; gap: 6px; }
+    .home-records .rec { padding: 5px 4px; }
+    .home-records .rec b { font-size: 14px; margin-top: 1px; }
+    .modal-panel { max-height: calc(100dvh - 16px); overflow-y: auto; }
+}
+
+/* 手機遊玩中：整個頁面鎖在可視範圍內，不會被撐大或捲動 */
+@media (pointer: coarse), (max-width: 900px) {
+    html:has(body.playing), body.playing { height: 100dvh; max-height: 100dvh; overflow: hidden; }
 }
